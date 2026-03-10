@@ -3,8 +3,9 @@ using SphereRabbitMQ.IaC.Domain.Topology;
 
 namespace SphereRabbitMQ.IaC.Cli.Commands.Models;
 
-internal sealed record ApplyCommandResult(
+internal sealed record DestroyCommandResult(
     bool DryRun,
+    bool DestroyVirtualHost,
     BrokerResolutionResult Broker,
     TopologyValidationResult Validation,
     TopologyPlan Plan)
