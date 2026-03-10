@@ -5,6 +5,8 @@ namespace SphereRabbitMQ.IaC.Application.Models;
 /// </summary>
 public sealed record TopologyDocument
 {
+    public BrokerDocument? Broker { get; init; }
+
     public IReadOnlyList<VirtualHostDocument> VirtualHosts { get; init; } = Array.Empty<VirtualHostDocument>();
 
     public NamingConventionDocument? Naming { get; init; }

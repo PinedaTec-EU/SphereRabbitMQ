@@ -45,11 +45,25 @@ public sealed class TopologyYamlParser : ITopologyParser
     private TopologyYamlDocument ResolveVariables(TopologyYamlDocument document)
         => document with
         {
+            Broker = ResolveBroker(document.Broker, document.Variables),
             Metadata = ResolveStringDictionary(document.Metadata, document.Variables),
             Variables = ResolveNullableStringDictionary(document.Variables, document.Variables),
             Naming = ResolveNaming(document.Naming, document.Variables),
             VirtualHosts = document.VirtualHosts.Select(vhost => ResolveVirtualHost(vhost, document.Variables)).ToList(),
         };
+
+    private BrokerYamlDocument? ResolveBroker(
+        BrokerYamlDocument? document,
+        IReadOnlyDictionary<string, string?> variables)
+        => document is null
+            ? null
+            : document with
+            {
+                ManagementUrl = ResolveOptional(document.ManagementUrl, variables),
+                Username = ResolveOptional(document.Username, variables),
+                Password = ResolveOptional(document.Password, variables),
+                VirtualHosts = document.VirtualHosts.Select(vhost => Resolve(vhost, variables)).ToList(),
+            };
 
     private VirtualHostYamlDocument ResolveVirtualHost(
         VirtualHostYamlDocument document,

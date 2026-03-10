@@ -5,6 +5,8 @@ namespace SphereRabbitMQ.IaC.Infrastructure.Yaml.Contracts;
 /// </summary>
 public sealed record TopologyYamlDocument
 {
+    public BrokerYamlDocument? Broker { get; init; }
+
     public List<VirtualHostYamlDocument> VirtualHosts { get; init; } = new();
 
     public NamingConventionYamlDocument? Naming { get; init; }
