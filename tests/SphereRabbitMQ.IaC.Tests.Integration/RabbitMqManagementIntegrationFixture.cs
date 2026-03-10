@@ -30,6 +30,8 @@ public sealed class RabbitMqManagementIntegrationFixture : IAsyncLifetime, IDisp
 
     public ITopologyPlanner TopologyPlanner { get; }
 
+    public ITopologyDestroyPlanner TopologyDestroyPlanner { get; }
+
     private readonly HttpClient _httpClient;
 
     private readonly bool _isConfigured;
@@ -54,6 +56,7 @@ public sealed class RabbitMqManagementIntegrationFixture : IAsyncLifetime, IDisp
             TopologyApplier = null!;
             TopologyExporter = null!;
             TopologyPlanner = null!;
+            TopologyDestroyPlanner = null!;
             return;
         }
 
@@ -71,6 +74,7 @@ public sealed class RabbitMqManagementIntegrationFixture : IAsyncLifetime, IDisp
         TopologyApplier = new RabbitMqManagementTopologyApplier(ApiClient);
         TopologyExporter = new RabbitMqManagementTopologyExporter(BrokerTopologyReader);
         TopologyPlanner = new TopologyPlannerService();
+        TopologyDestroyPlanner = new TopologyDestroyPlannerService();
     }
 
     public async Task InitializeAsync()

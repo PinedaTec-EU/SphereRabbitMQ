@@ -28,6 +28,7 @@ public static class RabbitMqServiceCollectionExtensions
         services.AddSingleton<ITopologyNormalizer, TopologyNormalizationService>();
         services.AddSingleton<ITopologyValidator, TopologyValidationService>();
         services.AddSingleton<ITopologyPlanner, TopologyPlannerService>();
+        services.AddSingleton<ITopologyDestroyPlanner, TopologyDestroyPlannerService>();
         services.AddSingleton<IRabbitMqRuntimeServiceFactory, RabbitMqRuntimeServiceFactory>();
         return services;
     }
