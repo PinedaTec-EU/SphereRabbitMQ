@@ -8,24 +8,90 @@ namespace SphereRabbitMQ.IaC.Cli.Commands;
 
 internal static class TopologyRootCommandFactory
 {
+    private const string RootDescription = """
+        RabbitMQ topology infrastructure-as-code for CI/CD and operator automation.
+
+        Commands:
+          validate  Validate topology files without contacting RabbitMQ.
+          plan      Compare desired topology with the broker. Never changes broker state.
+          apply     Apply only safe reconciliation operations. Refuses destructive changes.
+          destroy   Intentionally delete declared topology resources. Requires --allow-destructive unless used with --dry-run.
+          export    Export broker topology to YAML.
+
+        Examples:
+          sprmq plan --file samples/minimal-topology.yaml
+          sprmq apply --file samples/minimal-topology.yaml --dry-run
+          sprmq destroy --file samples/minimal-topology.yaml --dry-run
+          sprmq destroy --file samples/minimal-topology.yaml --allow-destructive
+          sprmq destroy --file samples/minimal-topology.yaml --allow-destructive --destroy-vhost
+        """;
+    private const string ValidateDescription = """
+        Validate topology YAML syntax, normalization, and semantic consistency.
+
+        Example:
+          sprmq validate --file samples/minimal-topology.yaml
+        """;
+    private const string PlanDescription = """
+        Compare desired topology against broker state and print a reconciliation plan.
+        This command never changes broker state.
+
+        Example:
+          sprmq plan --file samples/minimal-topology.yaml
+        """;
+    private const string ApplyDescription = """
+        Apply a topology plan to RabbitMQ.
+        This command only performs safe reconciliation and refuses destructive plans.
+
+        Example:
+          sprmq apply --file samples/minimal-topology.yaml --dry-run
+        """;
+    private const string DestroyDescription = """
+        Intentionally delete topology resources declared in the YAML file.
+        By default, destroy removes only declared resources and generated retry/dead-letter artifacts.
+        Use --destroy-vhost to delete the entire virtual host instead.
+        Non-dry execution requires --allow-destructive.
+
+        Examples:
+          sprmq destroy --file samples/minimal-topology.yaml --dry-run
+          sprmq destroy --file samples/minimal-topology.yaml --allow-destructive
+          sprmq destroy --file samples/minimal-topology.yaml --allow-destructive --destroy-vhost
+        """;
+    private const string ExportDescription = """
+        Export broker topology to YAML.
+
+        Example:
+          sprmq export --file samples/minimal-topology.yaml --output-file topology.yaml
+        """;
+
     internal static RootCommand Create(IServiceProvider serviceProvider)
     {
         var handler = serviceProvider.GetRequiredService<TopologyCommandHandler>();
 
         var fileOption = new Option<string>("--file") { IsRequired = true, Description = "Path to the topology YAML file." };
         var outputFormatOption = new Option<TopologyOutputFormat>("--output", () => TopologyOutputFormat.Text, "Output format: text or json.");
-        var managementUrlOption = new Option<string>("--management-url", () => Environment.GetEnvironmentVariable("SPHERE_RABBITMQ_MANAGEMENT_URL") ?? "http://localhost:15672/api/", "RabbitMQ Management API URL.");
-        var usernameOption = new Option<string>("--username", () => Environment.GetEnvironmentVariable("SPHERE_RABBITMQ_USERNAME") ?? "guest", "RabbitMQ username.");
-        var passwordOption = new Option<string>("--password", () => Environment.GetEnvironmentVariable("SPHERE_RABBITMQ_PASSWORD") ?? "guest", "RabbitMQ password.");
-        var virtualHostsOption = new Option<string[]>("--vhost", () => Array.Empty<string>(), "Virtual host filter. Repeat to pass multiple values.");
+        var managementUrlOption = new Option<string?>("--management-url", "RabbitMQ Management API URL.");
+        var usernameOption = new Option<string?>("--username", "RabbitMQ username.");
+        var passwordOption = new Option<string?>("--password", "RabbitMQ password.");
+        var virtualHostsOption = new Option<string[]?>("--vhost", "Virtual host filter. Repeat to pass multiple values.");
         var dryRunOption = new Option<bool>("--dry-run", () => false, "Compute and print the apply result without changing the broker.");
+        var verboseOption = new Option<bool>("--verbose", () => false, "Print detailed execution phases and broker operations.");
+        var allowDestructiveOption = new Option<bool>("--allow-destructive", () => false, "Allow destructive execution for commands that delete broker resources.");
+        var destroyVirtualHostOption = new Option<bool>("--destroy-vhost", () => false, "Delete the full virtual host instead of only the declared resources.");
         var exportOutputPathOption = new Option<string>("--output-file", () => "-", "Output file path for export. Use '-' to write YAML to stdout.");
+        var exportFileOption = new Option<string?>("--file", "Optional topology YAML file used as a source for broker connection settings.");
 
-        var rootCommand = new RootCommand("SphereRabbitMQ.IaC");
+        var rootCommand = new RootCommand("SphereRabbitMQ.IaC")
+        {
+            Description = RootDescription,
+        };
 
-        var validateCommand = new Command("validate", "Validate YAML syntax, normalization, and topology semantics.");
+        var validateCommand = new Command("validate")
+        {
+            Description = ValidateDescription,
+        };
         validateCommand.AddOption(fileOption);
         validateCommand.AddOption(outputFormatOption);
+        validateCommand.AddOption(verboseOption);
         Handler.SetHandler(validateCommand, async (InvocationContext context) =>
         {
             var parseResult = context.ParseResult;
@@ -33,17 +99,22 @@ internal static class TopologyRootCommandFactory
             var exitCode = await handler.ValidateAsync(
                 parseResult.GetValueForOption(fileOption)!,
                 parseResult.GetValueForOption(outputFormatOption),
+                parseResult.GetValueForOption(verboseOption),
                 cancellationToken);
             context.ExitCode = exitCode;
         });
 
-        var planCommand = new Command("plan", "Compare desired topology against broker state and print a reconciliation plan.");
+        var planCommand = new Command("plan")
+        {
+            Description = PlanDescription,
+        };
         planCommand.AddOption(fileOption);
         planCommand.AddOption(outputFormatOption);
         planCommand.AddOption(managementUrlOption);
         planCommand.AddOption(usernameOption);
         planCommand.AddOption(passwordOption);
         planCommand.AddOption(virtualHostsOption);
+        planCommand.AddOption(verboseOption);
         Handler.SetHandler(planCommand, async (InvocationContext context) =>
         {
             var parseResult = context.ParseResult;
@@ -52,11 +123,15 @@ internal static class TopologyRootCommandFactory
                 parseResult.GetValueForOption(fileOption)!,
                 CreateBrokerOptions(parseResult, managementUrlOption, usernameOption, passwordOption, virtualHostsOption),
                 parseResult.GetValueForOption(outputFormatOption),
+                parseResult.GetValueForOption(verboseOption),
                 cancellationToken);
             context.ExitCode = exitCode;
         });
 
-        var applyCommand = new Command("apply", "Apply a topology plan to RabbitMQ.");
+        var applyCommand = new Command("apply")
+        {
+            Description = ApplyDescription,
+        };
         applyCommand.AddOption(fileOption);
         applyCommand.AddOption(outputFormatOption);
         applyCommand.AddOption(managementUrlOption);
@@ -64,6 +139,7 @@ internal static class TopologyRootCommandFactory
         applyCommand.AddOption(passwordOption);
         applyCommand.AddOption(virtualHostsOption);
         applyCommand.AddOption(dryRunOption);
+        applyCommand.AddOption(verboseOption);
         Handler.SetHandler(applyCommand, async (InvocationContext context) =>
         {
             var parseResult = context.ParseResult;
@@ -73,25 +149,63 @@ internal static class TopologyRootCommandFactory
                 CreateBrokerOptions(parseResult, managementUrlOption, usernameOption, passwordOption, virtualHostsOption),
                 parseResult.GetValueForOption(outputFormatOption),
                 parseResult.GetValueForOption(dryRunOption),
+                parseResult.GetValueForOption(verboseOption),
                 cancellationToken);
             context.ExitCode = exitCode;
         });
 
-        var exportCommand = new Command("export", "Export broker topology to YAML.");
+        var destroyCommand = new Command("destroy")
+        {
+            Description = DestroyDescription,
+        };
+        destroyCommand.AddOption(fileOption);
+        destroyCommand.AddOption(outputFormatOption);
+        destroyCommand.AddOption(managementUrlOption);
+        destroyCommand.AddOption(usernameOption);
+        destroyCommand.AddOption(passwordOption);
+        destroyCommand.AddOption(virtualHostsOption);
+        destroyCommand.AddOption(dryRunOption);
+        destroyCommand.AddOption(verboseOption);
+        destroyCommand.AddOption(allowDestructiveOption);
+        destroyCommand.AddOption(destroyVirtualHostOption);
+        Handler.SetHandler(destroyCommand, async (InvocationContext context) =>
+        {
+            var parseResult = context.ParseResult;
+            var cancellationToken = context.GetCancellationToken();
+            var exitCode = await handler.DestroyAsync(
+                parseResult.GetValueForOption(fileOption)!,
+                CreateBrokerOptions(parseResult, managementUrlOption, usernameOption, passwordOption, virtualHostsOption),
+                parseResult.GetValueForOption(outputFormatOption),
+                parseResult.GetValueForOption(dryRunOption),
+                parseResult.GetValueForOption(verboseOption),
+                parseResult.GetValueForOption(allowDestructiveOption),
+                parseResult.GetValueForOption(destroyVirtualHostOption),
+                cancellationToken);
+            context.ExitCode = exitCode;
+        });
+
+        var exportCommand = new Command("export")
+        {
+            Description = ExportDescription,
+        };
+        exportCommand.AddOption(exportFileOption);
         exportCommand.AddOption(outputFormatOption);
         exportCommand.AddOption(managementUrlOption);
         exportCommand.AddOption(usernameOption);
         exportCommand.AddOption(passwordOption);
         exportCommand.AddOption(virtualHostsOption);
         exportCommand.AddOption(exportOutputPathOption);
+        exportCommand.AddOption(verboseOption);
         Handler.SetHandler(exportCommand, async (InvocationContext context) =>
         {
             var parseResult = context.ParseResult;
             var cancellationToken = context.GetCancellationToken();
             var exitCode = await handler.ExportAsync(
+                parseResult.GetValueForOption(exportFileOption),
                 CreateBrokerOptions(parseResult, managementUrlOption, usernameOption, passwordOption, virtualHostsOption),
                 parseResult.GetValueForOption(exportOutputPathOption)!,
                 parseResult.GetValueForOption(outputFormatOption),
+                parseResult.GetValueForOption(verboseOption),
                 cancellationToken);
             context.ExitCode = exitCode;
         });
@@ -99,20 +213,21 @@ internal static class TopologyRootCommandFactory
         rootCommand.AddCommand(validateCommand);
         rootCommand.AddCommand(planCommand);
         rootCommand.AddCommand(applyCommand);
+        rootCommand.AddCommand(destroyCommand);
         rootCommand.AddCommand(exportCommand);
 
         return rootCommand;
     }
 
-    private static BrokerOptions CreateBrokerOptions(
+    private static BrokerOptionsInput CreateBrokerOptions(
         ParseResult parseResult,
-        Option<string> managementUrlOption,
-        Option<string> usernameOption,
-        Option<string> passwordOption,
-        Option<string[]> virtualHostsOption)
+        Option<string?> managementUrlOption,
+        Option<string?> usernameOption,
+        Option<string?> passwordOption,
+        Option<string[]?> virtualHostsOption)
         => new(
-            parseResult.GetValueForOption(managementUrlOption)!,
-            parseResult.GetValueForOption(usernameOption)!,
-            parseResult.GetValueForOption(passwordOption)!,
-            parseResult.GetValueForOption(virtualHostsOption)!);
+            parseResult.GetValueForOption(managementUrlOption),
+            parseResult.GetValueForOption(usernameOption),
+            parseResult.GetValueForOption(passwordOption),
+            parseResult.GetValueForOption(virtualHostsOption));
 }
