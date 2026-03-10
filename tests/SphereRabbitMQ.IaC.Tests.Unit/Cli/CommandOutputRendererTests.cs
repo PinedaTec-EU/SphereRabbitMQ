@@ -58,6 +58,9 @@ public sealed class CommandOutputRendererTests
 
         var text = CommandOutputRenderer.RenderApply(result);
 
+        Assert.Contains("Apply completed.", text, StringComparison.Ordinal);
+        Assert.Contains("Execution plan:", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("\nPlan:\n", text, StringComparison.Ordinal);
         Assert.Contains("[unsupported] /virtualHosts/sales/exchanges/orders", text, StringComparison.Ordinal);
         Assert.Contains("diff type: desired=Topic actual=Direct", text, StringComparison.Ordinal);
     }

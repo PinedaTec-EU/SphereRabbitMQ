@@ -74,4 +74,50 @@ public sealed class TopologyPlannerServiceTests
         Assert.Contains(topologyPlan.Operations, operation => operation.Kind == TopologyPlanOperationKind.UnsupportedChange && operation.ResourceKind == TopologyResourceKind.Exchange);
         Assert.Single(topologyPlan.UnsupportedChanges);
     }
+
+    [Fact]
+    public async Task PlanAsync_TreatsEquivalentArgumentDictionaries_AsNoOp()
+    {
+        ITopologyPlanner topologyPlanner = new TopologyPlannerService();
+        var desiredTopology = new TopologyDefinition(
+        [
+            new VirtualHostDefinition(
+                "sales",
+                queues:
+                [
+                    new QueueDefinition(
+                        "orders.retry",
+                        QueueType.Classic,
+                        arguments: new Dictionary<string, object?>(StringComparer.Ordinal)
+                        {
+                            ["x-queue-type"] = "classic",
+                            ["x-message-ttl"] = 30000L,
+                            ["x-dead-letter-exchange"] = string.Empty,
+                            ["x-dead-letter-routing-key"] = "orders.created",
+                        }),
+                ]),
+        ]);
+        var actualTopology = new TopologyDefinition(
+        [
+            new VirtualHostDefinition(
+                "sales",
+                queues:
+                [
+                    new QueueDefinition(
+                        "orders.retry",
+                        QueueType.Classic,
+                        arguments: new Dictionary<string, object?>(StringComparer.Ordinal)
+                        {
+                            ["x-dead-letter-exchange"] = string.Empty,
+                            ["x-dead-letter-routing-key"] = "orders.created",
+                            ["x-message-ttl"] = 30000L,
+                            ["x-queue-type"] = "classic",
+                        }),
+                ]),
+        ]);
+
+        var topologyPlan = await topologyPlanner.PlanAsync(desiredTopology, actualTopology);
+
+        Assert.All(topologyPlan.Operations, operation => Assert.Equal(TopologyPlanOperationKind.NoOp, operation.Kind));
+    }
 }

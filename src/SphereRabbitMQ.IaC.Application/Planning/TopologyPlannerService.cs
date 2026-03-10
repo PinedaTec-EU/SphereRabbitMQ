@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using SphereRabbitMQ.IaC.Application.Planning.Interfaces;
 using SphereRabbitMQ.IaC.Domain.Planning;
 using SphereRabbitMQ.IaC.Domain.Topology;
@@ -344,5 +345,38 @@ public sealed class TopologyPlannerService : ITopologyPlanner
     }
 
     private static string Serialize<T>(T value)
-        => JsonSerializer.Serialize(value);
+        => CanonicalizeNode(JsonSerializer.SerializeToNode(value))?.ToJsonString() ?? "null";
+
+    private static JsonNode? CanonicalizeNode(JsonNode? node)
+        => node switch
+        {
+            null => null,
+            JsonObject jsonObject => CanonicalizeObject(jsonObject),
+            JsonArray jsonArray => CanonicalizeArray(jsonArray),
+            _ => node.DeepClone(),
+        };
+
+    private static JsonObject CanonicalizeObject(JsonObject jsonObject)
+    {
+        var normalized = new JsonObject();
+
+        foreach (var property in jsonObject.OrderBy(pair => pair.Key, StringComparer.Ordinal))
+        {
+            normalized[property.Key] = CanonicalizeNode(property.Value);
+        }
+
+        return normalized;
+    }
+
+    private static JsonArray CanonicalizeArray(JsonArray jsonArray)
+    {
+        var normalized = new JsonArray();
+
+        foreach (var item in jsonArray)
+        {
+            normalized.Add(CanonicalizeNode(item));
+        }
+
+        return normalized;
+    }
 }

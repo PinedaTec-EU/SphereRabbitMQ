@@ -1,5 +1,6 @@
 using System.Text;
 using SphereRabbitMQ.IaC.Cli.Commands.Models;
+using SphereRabbitMQ.IaC.Domain.Planning;
 using SphereRabbitMQ.IaC.Domain.Topology;
 
 namespace SphereRabbitMQ.IaC.Cli.Commands;
@@ -17,23 +18,7 @@ internal static class CommandOutputRenderer
     internal static string RenderPlan(PlanCommandResult result)
     {
         var builder = new StringBuilder();
-        AppendBroker(builder, result.Broker);
-        builder.AppendLine(result.Validation.IsValid ? "Validation succeeded." : "Validation failed.");
-        AppendIssues(builder, result.Validation.Issues);
-
-        if (!result.Validation.IsValid)
-        {
-            return builder.ToString().TrimEnd();
-        }
-
-        builder.AppendLine("Plan:");
-        foreach (var operation in result.Plan.Operations)
-        {
-            builder.AppendLine($"- [{operation.Kind}] {operation.ResourcePath}: {operation.Description}");
-        }
-
-        AppendBlockingChanges(builder, result.BlockingChanges);
-
+        AppendPlanBody(builder, result.Broker, result.Validation, result.Plan, result.BlockingChanges, "Plan:");
         return builder.ToString().TrimEnd();
     }
 
@@ -41,7 +26,7 @@ internal static class CommandOutputRenderer
     {
         var builder = new StringBuilder();
         builder.AppendLine(result.DryRun ? "Dry-run apply completed." : "Apply completed.");
-        builder.Append(CommandOutputRenderer.RenderPlan(new PlanCommandResult(result.Broker, result.Validation, result.Plan)));
+        AppendPlanBody(builder, result.Broker, result.Validation, result.Plan, result.BlockingChanges, "Execution plan:");
         return builder.ToString().TrimEnd();
     }
 
@@ -86,6 +71,32 @@ internal static class CommandOutputRenderer
         {
             builder.AppendLine($"- [{issue.Severity}] {issue.Path}: {issue.Message}");
         }
+    }
+
+    private static void AppendPlanBody(
+        StringBuilder builder,
+        BrokerResolutionResult broker,
+        TopologyValidationResult validation,
+        TopologyPlan plan,
+        IReadOnlyList<BlockingChangeResult> blockingChanges,
+        string heading)
+    {
+        AppendBroker(builder, broker);
+        builder.AppendLine(validation.IsValid ? "Validation succeeded." : "Validation failed.");
+        AppendIssues(builder, validation.Issues);
+
+        if (!validation.IsValid)
+        {
+            return;
+        }
+
+        builder.AppendLine(heading);
+        foreach (var operation in plan.Operations)
+        {
+            builder.AppendLine($"- [{operation.Kind}] {operation.ResourcePath}: {operation.Description}");
+        }
+
+        AppendBlockingChanges(builder, blockingChanges);
     }
 
     private static void AppendBroker(StringBuilder builder, BrokerResolutionResult broker)

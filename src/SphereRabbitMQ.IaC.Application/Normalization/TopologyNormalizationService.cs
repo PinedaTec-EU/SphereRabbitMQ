@@ -219,6 +219,8 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
         (string Exchange, string RoutingKey)? deadLetterTarget)
     {
         var arguments = new Dictionary<string, object?>(StringComparer.Ordinal);
+        EnsureQueueTypeArgument(QueueType.Classic, arguments);
+
         if (ttl is not null)
         {
             arguments[TopologyNormalizationConsts.MessageTtlArgument] = Convert.ToInt64(ttl.Value.TotalMilliseconds);
