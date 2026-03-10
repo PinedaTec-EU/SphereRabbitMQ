@@ -153,7 +153,7 @@ internal sealed class TopologyCommandHandler
                 : "Phase: read broker topology, build plan, and apply safe operations.");
             stream.Position = 0;
             using var runtimeServices = CreateRuntimeServices(broker.Options);
-            var result = await BuildDryRunResultAsync(broker, runtimeServices, stream, cancellationToken);
+            var result = await BuildApplyPreviewResultAsync(broker, dryRun, runtimeServices, stream, cancellationToken);
 
             Write(outputFormat, result, CommandOutputRenderer.RenderApply(result));
 
@@ -313,24 +313,15 @@ internal sealed class TopologyCommandHandler
         }
     }
 
-    private static async Task<ApplyCommandResult> BuildDryRunResultAsync(
+    private static async Task<ApplyCommandResult> BuildApplyPreviewResultAsync(
         BrokerResolutionResult broker,
+        bool dryRun,
         global::SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Runtime.RabbitMqRuntimeServices runtimeServices,
         Stream stream,
         CancellationToken cancellationToken)
     {
         var (_, validation, plan) = await runtimeServices.TopologyWorkflowService.PlanAsync(stream, cancellationToken);
-        return new ApplyCommandResult(true, broker, validation, plan);
-    }
-
-    private static async Task<ApplyCommandResult> BuildApplyResultAsync(
-        BrokerResolutionResult broker,
-        global::SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Runtime.RabbitMqRuntimeServices runtimeServices,
-        Stream stream,
-        CancellationToken cancellationToken)
-    {
-        var (_, validation, plan) = await runtimeServices.TopologyWorkflowService.ApplyAsync(stream, cancellationToken);
-        return new ApplyCommandResult(false, broker, validation, plan);
+        return new ApplyCommandResult(dryRun, broker, validation, plan);
     }
 
     private static async Task<DestroyCommandResult> BuildDestroyDryRunResultAsync(
