@@ -81,9 +81,7 @@
                 "${workspaceFolder}/SphereRabbitMQ.slnx",
                 "--collect:\"XPlat Code Coverage\"",
                 "--results-directory",
-                "${workspaceFolder}/TestResults",
-                "--settings",
-                "${workspaceFolder}/tests/SphereRabbitMQ.Api.Tests/.runsettings"
+                "${workspaceFolder}/TestResults"
             ],
             "problemMatcher": "$msCompile",
             "presentation": {
