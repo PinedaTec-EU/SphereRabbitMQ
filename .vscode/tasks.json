@@ -1,0 +1,135 @@
+{
+    "version": "2.0.0",
+    "inputs": [],
+    "tasks": [
+        {
+            "label": "build",
+            "command": "dotnet",
+            "type": "process",
+            "args": [
+                "build",
+                "${workspaceFolder}/SphereRabbitMQ.slnx",
+                "/property:GenerateFullPaths=true",
+                "/consoleloggerparameters:NoSummary;ForceNoAlign"
+            ],
+            "problemMatcher": "$msCompile",
+            "dependsOn": [],
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            }
+        },
+        {
+            "type": "shell",
+            "label": "build inc version",
+            "command": "dotnet build ${workspaceFolder}/SphereRabbitMQ.slnx",
+            "problemMatcher": [
+                "$msCompile"
+            ],
+            "dependsOn": [
+                "Increase version"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "Increase version",
+            "command": "dotnet",
+            "type": "shell",
+            "args": [
+                "${workspaceFolder}/tools/increase.asm.version/increase.asm.version.dll",
+                "${workspaceFolder}",
+                "0.0.0.1"
+            ],
+            "group": "none",
+            "presentation": {
+                "reveal": "always"
+            },
+            "problemMatcher": "$msCompile"
+        },
+        // {
+        // 	"label": "publish tool cli (win-x64 single-file)",
+        // 	"command": "dotnet",
+        // 	"type": "process",
+        // 	"presentation": {
+        // 		"reveal": "always"
+        // 	},
+        // 	"args": [
+        // 		"publish",
+        // 		"${workspaceFolder}/src/ApiOrchestratorSphere.cli/ApiOrchestratorSphere.cli.csproj",
+        // 		"-c",
+        // 		"Release",
+        // 		"-r",
+        // 		"win-x64",
+        // 		"/p:PublishSingleFile=true",
+        // 		"/p:SelfContained=true",
+        // 		"/p:DebugType=None",
+        // 		"/p:DebugSymbols=false",
+        // 		"-o",
+        // 		"${workspaceFolder}/releases/${input:publishDir}/windows"
+        // 	],
+        // 	"problemMatcher": "$msCompile"
+        // },
+        {
+            "label": "Launch test with coverage",
+            "command": "dotnet",
+            "type": "shell",
+            "args": [
+                "test",
+                "${workspaceFolder}/SphereRabbitMQ.slnx",
+                "--collect:\"XPlat Code Coverage\"",
+                "--results-directory",
+                "${workspaceFolder}/TestResults",
+                "--settings",
+                "${workspaceFolder}/tests/SphereRabbitMQ.Api.Tests/.runsettings"
+            ],
+            "problemMatcher": "$msCompile",
+            "presentation": {
+                "reveal": "always"
+            },
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "Generate Coverage Report",
+            "command": "reportgenerator",
+            "type": "shell",
+            "args": [
+                "\"-reports:${workspaceFolder}/TestResults/**/coverage.cobertura.xml\"",
+                "\"-targetdir:${workspaceFolder}/TestResults/CoverageReport\"",
+                "\"-reporttypes:Html\""
+            ],
+            "problemMatcher": [],
+            "dependsOn": [
+                "Launch test with coverage"
+            ],
+            "presentation": {
+                "reveal": "always"
+            },
+            "options": {
+                "env": {
+                    "PATH": "${env:HOME}/.dotnet/tools:${env:PATH}"
+                }
+            }
+        },
+        {
+            "label": "Generate+Open Coverage Report",
+            "command": "open",
+            "type": "shell",
+            "args": [
+                "${workspaceFolder}/TestResults/CoverageReport/index.html"
+            ],
+            "problemMatcher": [],
+            "dependsOn": [
+                "Generate Coverage Report"
+            ],
+            "presentation": {
+                "reveal": "never"
+            }
+        }
+    ]
+}
