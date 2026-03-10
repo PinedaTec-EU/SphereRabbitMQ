@@ -1,3 +1,4 @@
+using System.CommandLine;
 using Microsoft.Extensions.DependencyInjection;
 using SphereRabbitMQ.IaC.Cli.Commands;
 using SphereRabbitMQ.IaC.Cli.DependencyInjection;
@@ -21,6 +22,6 @@ public static class Program
             .BuildServiceProvider();
 
         var rootCommand = TopologyRootCommandFactory.Create(services);
-        return rootCommand.Parse(args).InvokeAsync();
+        return rootCommand.InvokeAsync(args);
     }
 }
