@@ -2,7 +2,7 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
-    <AssemblyName>SphereRabbitMQ.IaC.Cli</AssemblyName>
+    <AssemblyName>sprmq</AssemblyName>
     <ReleaseVersion>0.1.1.7</ReleaseVersion>
     <AssemblyVersion>$(ReleaseVersion)</AssemblyVersion>
     <FileVersion>$(ReleaseVersion)</FileVersion>

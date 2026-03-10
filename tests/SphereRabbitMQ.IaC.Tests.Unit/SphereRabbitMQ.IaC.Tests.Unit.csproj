@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\SphereRabbitMQ.IaC.Application\SphereRabbitMQ.IaC.Application.csproj" />
+    <ProjectReference Include="..\..\src\SphereRabbitMQ.IaC.Cli\SphereRabbitMQ.IaC.Cli.csproj" />
     <ProjectReference Include="..\..\src\SphereRabbitMQ.IaC.Domain\SphereRabbitMQ.IaC.Domain.csproj" />
     <ProjectReference Include="..\..\src\SphereRabbitMQ.IaC.Infrastructure.RabbitMQ\SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.csproj" />
     <ProjectReference Include="..\..\src\SphereRabbitMQ.IaC.Infrastructure.Yaml\SphereRabbitMQ.IaC.Infrastructure.Yaml.csproj" />
