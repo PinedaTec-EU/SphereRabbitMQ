@@ -1,34 +1,33 @@
 ---
 name: dotnet
-description: Work on the .NET solution for TravelAgent. Use this when editing APIs, portals, scheduler/jobs, licensing core, shared contracts/persistence, JSON data, or tests.
+description: Work on the .NET solution. Use this when editing APIs, portals, scheduler/jobs, core libraries, shared contracts/persistence, JSON data, or tests.
 ---
 
 # .NET
 
 - .Net 10
 
+## Optional skill extensions
+
+The following skill files are applied when they exist alongside this skill:
+
+- `mongodb.md` — collection naming, BSON document contracts
+- `smtp.md` — outbound email queue patterns
+- `blazor.md` — Blazor/Razor component rules
+- `ai.md` — AI/Ollama integration rules
+- `workers.md` — background worker audit invariants
+
 ## Main structure
 
-- admin
-    + portal -> src/admin/TravelAgent.Admin.Portal
-    + api -> src/admin/TravelAgent.Admin.Api
-    + licensing api -> src/admin/TravelAgent.Admin.Licensing.Api
-- licensing
-    + core -> src/licensing/TravelAgent.Licensing.Core
-    + mongo -> src/licensing/TravelAgent.Licensing.Mongo
-    + public api -> src/licensing/TravelAgent.Licensing.PublicApi
-- shared
-    + core -> src/shared/TravelAgent.Core
-    + contracts -> src/shared/TravelAgent.Licensing.Contracts
-    + mongo persistence -> src/shared/TravelAgent.Persistence.Mongo
-- global
-    + scheduler -> src/global/TravelAgent.Global.Scheduler
-- tools
-    + migrations -> src/tools/TravelAgent.Tools.Migrations
+If a `PROJECT.md` file exists alongside this skill, use it as the authoritative reference for project-specific structure, context names, and collection prefixes.
+
+Otherwise, assume the standard layout:
+- `src/` — production source projects
+- `tests/` — test projects
 
 ### Web portals
 
-- Register user ip, browser info, and resolve ip location using an external service (Ipify)
+- Register user ip, browser info, and resolve ip location using an external IP geolocation service
 
 ### Http APIs
 
@@ -40,7 +39,6 @@ description: Work on the .NET solution for TravelAgent. Use this when editing AP
 - Before implementing, inspect whether the capability already exists partially or fully in the same bounded context and prefer extending/reusing that path instead of creating a parallel one.
 - During analysis, if duplicated functionality, duplicated responsibilities, or near-identical flows are detected, explicitly alert about it before or while implementing.
 - If a method has a `CancellationToken`, it must be the last parameter in the method signature.
-- For Blazor components, inline `@code { ... }` blocks in `.razor` files are not allowed. Logic must be externalized to `.razor.cs` (partial class code-behind).
 - SOLID principles must be followed.
 - Reuse-first rule: avoid adding new types, helpers, mappers, validators, or UI blocks when an existing focused abstraction can be reused or extended with low coupling.
 - Variables must be descriptive and clear, without being excessively long.
@@ -62,32 +60,26 @@ description: Work on the .NET solution for TravelAgent. Use this when editing AP
 - Search extension rule: for dynamic search key resolution, prefer multiple focused `IKeyResolver` implementations (registered together) instead of one monolithic resolver. Add behavior by adding new resolver classes and DI registrations, not by growing a central resolver.
 - Maintainability reduction rule: when the same composition/configuration logic appears in 2+ modules (for example repeated DI registrations), extract a shared extension/factory in the owning domain package and reuse it from consumers. Prefer one canonical registration point over duplicated wiring.
 - Open telemetry for every component, apis, workers, services
-- Time source invariant (required): in runtime code (APIs, services, workers, stores), do not use `DateTime.UtcNow` or `DateTimeOffset.UtcNow` directly. Inject and use `ISuiteTimeProvider` (`UtcNow`, `UtcDate`) so behavior is deterministic/testable. The canonical clock abstraction/implementation lives in `src/shared/TravelAgent.Core/Time` and must not be hosted in domain cores. Keep direct wall-clock calls only in tests or strictly isolated compatibility layers.
-- Outbound emails must follow queue-first pattern: write to `suite_emails` and dispatch from an audited worker (no direct send from portal/API request handlers).
-- Worker audit invariant (required): every runtime worker (`BackgroundService`/`IHostedService`) must append execution audits to `suite_observability_worker_audits` with, at minimum, `workerName`, `schedulerName`, `version`, `startedAtUtc`, `completedAtUtc`, `durationMs`, `succeeded`, and `message`. Do not add workers that run without audit persistence.
-- External runtime configuration (SMTP, endpoints, storage, provider options) must come from GCR (`system/global/user` as applicable). `appsettings` is only allowed for GCR endpoint/bootstrap, not as fallback for other external systems.
+- Time source invariant (required): in runtime code (APIs, services, workers, stores), do not use `DateTime.UtcNow` or `DateTimeOffset.UtcNow` directly. Inject and use `ISuiteTimeProvider` (`UtcNow`, `UtcDate`) so behavior is deterministic/testable. The canonical clock abstraction/implementation must live in the shared core project and must not be hosted in domain cores. Keep direct wall-clock calls only in tests or strictly isolated compatibility layers.
+- External runtime configuration (SMTP, endpoints, storage, provider options) must come from the external runtime configuration store (defined in PROJECT.md). `appsettings` is only allowed for bootstrap/entry-point configuration, not as fallback for other external systems.
 - Dependency injection rule: never instantiate runtime collaborators inside controllers/services/stores (for example, providers, gateways, stores, clients, resolvers, clocks). Require abstractions in constructor parameters and resolve them from IoC; tests must pass fakes/mocks explicitly.
 - Constructor dependency rule: constructor parameters must use interfaces/contracts (`I*`) instead of final concrete implementations whenever the dependency is an internal collaborator/service/provider/client/store that can be abstracted. Only depend on a concrete type when the concrete type itself is the intended boundary and no meaningful contract exists.
 - Program composition rule: registrations added to `Program.cs` must be extracted to `ServiceCollectionExtensions.cs` and grouped by functionality (for example: presentation, infrastructure, domain/application). Keep `Program.cs` as minimal composition/root wiring.
 - Core folder/naming convention for services/stores:
   - Use vertical folders by capability (`Store`, `Versioning`, `Time`, `Audit`, `Seeding`, `Evaluator`, etc.).
-  - Interfaces must live in `<Capability>/Interfaces` and use `I*` naming (`Store/Interfaces/ILicenseStore.cs`).
+  - Interfaces must live in `<Capability>/Interfaces` and use `I*` naming (e.g., `Store/Interfaces/I<Domain>Store.cs`).
   - Implementations must live in `<Capability>/` (not inside `Interfaces/`) and use explicit role suffixes:
     - stores: `*Store.cs` (or `*StoreService.cs` when it is an orchestration/service wrapper around store behavior)
     - services: `*Service.cs`
     - providers: `*Provider.cs`
   - Keep one clear interface-to-implementation mapping and avoid mixing unrelated capabilities in the same folder.
 - Global usings convention: when the same `using` appears repeatedly in a project (default threshold: 5+ files), move it to that project's `globals.cs` as a `global using`. Keep file-local `using` when scope is intentionally narrow or improves readability.
-- AI/Ollama integrations must always go through the prompt-safety pipeline component (`OllamaGenerateGateway` + gate). No direct model generate calls from pages/services. Portal enforcement is configured from GCR (`ollama.promptSafetyEnabled`).
 - Architectural decision policy: prefer centralizing business/context decisions in a single orchestrator/service. Do not spread decision flags across callers when callers only forward values and do not own the decision context.
-- Cross-suite store/event invariant: for every domain with lifecycle/state transitions, define one store boundary (`I<Domain>Store`) as the single source of truth for persistence and integration-event emission. Controllers, seeders, workers, and portals must never emit domain events directly.
+- Cross-domain store/event invariant: for every domain with lifecycle/state transitions, define one store boundary (`I<Domain>Store`) as the single source of truth for persistence and integration-event emission. Controllers, seeders, workers, and portals must never emit domain events directly.
 - Portal-level global rules (`admin`, `tenant`, `guest`) should be managed in Customization UI with override-only persistence and reset-to-default controls, instead of hardcoding per-consumer flags.
-- Licensing integration-event invariant: `ILicenseStore` is the single source of truth for transition event emission. API/seeders/workers must not emit licensing integration events directly. Any `Add*`/`Update*`/`Update*Status` path that changes entity status must emit consistently in both `MongoLicenseStore` and `InMemoryLicenseStore`.
 - Multi-portal API boundary invariant: when a domain serves multiple portals, keep role-separated APIs by project/namespace. Admin APIs own management/mutations; tenant/guest APIs must be read-only or narrowly scoped operations and must not expose admin mutation endpoints.
-- Reuse-first UI/component rule: when a UI block/component is expected to be used in 2 or more places, default to extracting it as an independent reusable component (preferably in `TravelAgent.Portal.Shared` for portal UI) instead of duplicating markup/logic.
-- Razor code-behind rule: `*.razor.cs` files must stay thin. They should only wire presentation events/lifecycle to injected services, providers, or dedicated helper descriptors. Search/filter rules, validation, persistence shaping, and reusable UI state logic must live outside the main code-behind body.
+- Reuse-first UI/component rule: when a UI block/component is expected to be used in 2 or more places, default to extracting it as an independent reusable component (preferably in the shared portal project) instead of duplicating markup/logic.
 - Contract shape rule: do not introduce nested helper DTOs inside a request/response only to visually reduce top-level member count (for example `Configuration`, `Payload`, `Data`). If several requests/responses share the same fields, extract an explicit shared base contract in `src/shared/.../Contracts` and keep the actual HTTP contract flat.
-- BSON contract strictness rule: do not tolerate legacy or unknown fields in persisted Mongo documents by default. Do not use `IgnoreExtraElements` or equivalent compatibility mappings unless the user explicitly asks for backward compatibility or a migration window. If legacy fields appear in persisted documents, prefer failing fast and adding tests that assert the deserialization error.
 - While the app is incomplete, don't make legacy code, don't worry about refactoring, just add new code in the best way possible, and when the app is complete, we can start refactoring and improving the codebase as needed.
 - Breaking-change rule (required during development): do not add backward-compatibility layers, legacy parsers, dual-format persistence, tolerant readers, or transition code for old data/contracts unless the user explicitly asks for compatibility or a migration window. Default to one canonical format and update seeds/tests/contracts to match it.
 
@@ -123,13 +115,6 @@ description: Work on the .NET solution for TravelAgent. Use this when editing AP
 - PRs are reviewed by the owner before merging into main.
 - After any merge to `main`, fetch and merge/rebase `origin/main` into your working branch before continuing.
 - Repo maintenance tasks may be applied directly to `main` when explicitly agreed.
-
-## Mongo naming
-
-- Collection names must follow `suite_{context}_{entities}`.
-- Use lowercase + snake_case + English + plural entities.
-- Prefer stable domain contexts (`licensing`, `configuration`, `identity`, `ai`, `observability`, etc.), not UI/module names.
-- See `docs/mongo-collection-naming.md` for canonical names.
 
 ## Build
 - Increment version numbers in `version_definition.json` as part of the every build process, property "currentVersion" incremented with +0.0.0.1, 
