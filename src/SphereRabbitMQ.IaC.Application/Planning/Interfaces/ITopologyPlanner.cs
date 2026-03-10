@@ -1,7 +1,7 @@
 using SphereRabbitMQ.IaC.Domain.Planning;
 using SphereRabbitMQ.IaC.Domain.Topology;
 
-namespace SphereRabbitMQ.IaC.Application.Abstractions;
+namespace SphereRabbitMQ.IaC.Application.Planning.Interfaces;
 
 /// <summary>
 /// Produces a reconciliation plan between desired and actual topology.

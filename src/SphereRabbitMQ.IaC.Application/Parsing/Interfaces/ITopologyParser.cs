@@ -1,6 +1,6 @@
 using SphereRabbitMQ.IaC.Application.Models;
 
-namespace SphereRabbitMQ.IaC.Application.Abstractions;
+namespace SphereRabbitMQ.IaC.Application.Parsing.Interfaces;
 
 /// <summary>
 /// Parses external topology documents into source-neutral application models.

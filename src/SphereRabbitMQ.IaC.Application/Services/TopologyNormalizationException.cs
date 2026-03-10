@@ -1,6 +1,6 @@
 using SphereRabbitMQ.IaC.Domain.Topology;
 
-namespace SphereRabbitMQ.IaC.Application.Services;
+namespace SphereRabbitMQ.IaC.Application.Normalization;
 
 /// <summary>
 /// Raised when a source document cannot be normalized into a valid topology model.

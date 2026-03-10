@@ -1,7 +1,7 @@
 using SphereRabbitMQ.IaC.Application.Models;
 using SphereRabbitMQ.IaC.Domain.Topology;
 
-namespace SphereRabbitMQ.IaC.Application.Abstractions;
+namespace SphereRabbitMQ.IaC.Application.Normalization.Interfaces;
 
 /// <summary>
 /// Converts source-neutral topology documents into normalized domain definitions.

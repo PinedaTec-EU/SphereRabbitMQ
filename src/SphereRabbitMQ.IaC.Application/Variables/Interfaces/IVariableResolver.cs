@@ -1,4 +1,4 @@
-namespace SphereRabbitMQ.IaC.Application.Abstractions;
+namespace SphereRabbitMQ.IaC.Application.Variables.Interfaces;
 
 /// <summary>
 /// Resolves placeholders used inside topology source documents.

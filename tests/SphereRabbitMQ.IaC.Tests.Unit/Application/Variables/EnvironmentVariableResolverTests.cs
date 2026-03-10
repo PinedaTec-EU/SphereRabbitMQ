@@ -1,29 +1,30 @@
-using SphereRabbitMQ.IaC.Application.Services;
+using SphereRabbitMQ.IaC.Application.Variables;
+using SphereRabbitMQ.IaC.Application.Variables.Interfaces;
 
-namespace SphereRabbitMQ.IaC.Tests.Unit.Application;
+namespace SphereRabbitMQ.IaC.Tests.Unit.Application.Variables;
 
 public sealed class EnvironmentVariableResolverTests
 {
     [Fact]
     public void Resolve_UsesExplicitVariables_BeforeEnvironment()
     {
-        var resolver = new EnvironmentVariableResolver();
+        IVariableResolver variableResolver = new EnvironmentVariableResolver();
         Environment.SetEnvironmentVariable("SPHERE_REGION", "eu-west");
 
-        var result = resolver.Resolve(
+        var resolvedValue = variableResolver.Resolve(
             "topology-${SPHERE_REGION}",
             new Dictionary<string, string?> { ["SPHERE_REGION"] = "us-east" });
 
-        Assert.Equal("topology-us-east", result);
+        Assert.Equal("topology-us-east", resolvedValue);
     }
 
     [Fact]
     public void Resolve_Throws_WhenVariableIsMissing()
     {
-        var resolver = new EnvironmentVariableResolver();
+        IVariableResolver variableResolver = new EnvironmentVariableResolver();
 
         var exception = Assert.Throws<InvalidOperationException>(() =>
-            resolver.Resolve("topology-${MISSING_VAR}", new Dictionary<string, string?>()));
+            variableResolver.Resolve("topology-${MISSING_VAR}", new Dictionary<string, string?>()));
 
         Assert.Contains("MISSING_VAR", exception.Message);
     }

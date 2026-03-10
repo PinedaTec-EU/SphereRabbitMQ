@@ -1,6 +1,6 @@
 using SphereRabbitMQ.IaC.Domain.Topology;
 
-namespace SphereRabbitMQ.IaC.Application.Abstractions;
+namespace SphereRabbitMQ.IaC.Application.Validation.Interfaces;
 
 /// <summary>
 /// Validates a normalized topology definition.

@@ -1,6 +1,6 @@
 using SphereRabbitMQ.IaC.Domain.Topology;
 
-namespace SphereRabbitMQ.IaC.Application.Abstractions;
+namespace SphereRabbitMQ.IaC.Application.Broker.Interfaces;
 
 /// <summary>
 /// Reads the current broker topology state and returns a normalized representation.

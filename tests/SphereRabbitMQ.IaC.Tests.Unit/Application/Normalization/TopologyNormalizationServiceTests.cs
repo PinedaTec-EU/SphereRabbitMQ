@@ -1,16 +1,17 @@
 using SphereRabbitMQ.IaC.Application.Models;
-using SphereRabbitMQ.IaC.Application.Services;
+using SphereRabbitMQ.IaC.Application.Normalization;
+using SphereRabbitMQ.IaC.Application.Normalization.Interfaces;
 using SphereRabbitMQ.IaC.Domain.Topology;
 
-namespace SphereRabbitMQ.IaC.Tests.Unit.Application;
+namespace SphereRabbitMQ.IaC.Tests.Unit.Application.Normalization;
 
 public sealed class TopologyNormalizationServiceTests
 {
     [Fact]
-    public async Task NormalizeAsync_ProducesDeterministicOrdering_AndParsesRetrySettings()
+    public async Task NormalizeAsync_ProducesDeterministicOrdering_AndGeneratesRetryArtifacts()
     {
-        var service = new TopologyNormalizationService();
-        var document = new TopologyDocument
+        ITopologyNormalizer topologyNormalizer = new TopologyNormalizationService();
+        var topologyDocument = new TopologyDocument
         {
             VirtualHosts =
             [
@@ -43,21 +44,20 @@ public sealed class TopologyNormalizationServiceTests
             ],
         };
 
-        var result = await service.NormalizeAsync(document);
+        var topologyDefinition = await topologyNormalizer.NormalizeAsync(topologyDocument);
 
-        Assert.Equal(["a-vhost", "z-vhost"], result.VirtualHosts.Select(vhost => vhost.Name).ToArray());
-        var normalizedQueue = result.VirtualHosts[1].Queues.Single();
-        Assert.Equal(QueueType.Quorum, normalizedQueue.Type);
-        Assert.NotNull(normalizedQueue.Retry);
-        Assert.Equal(2, normalizedQueue.Retry!.Steps.Count);
-        Assert.Equal(["audit", "events"], result.VirtualHosts[1].Exchanges.Select(exchange => exchange.Name).ToArray());
+        Assert.Equal(["a-vhost", "z-vhost"], topologyDefinition.VirtualHosts.Select(vhost => vhost.Name).ToArray());
+        Assert.Equal(["audit", "events", "orders.retry"], topologyDefinition.VirtualHosts[1].Exchanges.Select(exchange => exchange.Name).ToArray());
+        Assert.Contains(topologyDefinition.VirtualHosts[1].Queues, queue => queue.Name == "orders.retry.fast");
+        Assert.Contains(topologyDefinition.VirtualHosts[1].Queues, queue => queue.Name == "orders.retry.slow");
+        Assert.Equal(QueueType.Quorum, topologyDefinition.VirtualHosts[1].Queues.Single(queue => queue.Name == "orders").Type);
     }
 
     [Fact]
     public async Task NormalizeAsync_Throws_WhenExchangeTypeIsInvalid()
     {
-        var service = new TopologyNormalizationService();
-        var document = new TopologyDocument
+        ITopologyNormalizer topologyNormalizer = new TopologyNormalizationService();
+        var topologyDocument = new TopologyDocument
         {
             VirtualHosts =
             [
@@ -72,7 +72,7 @@ public sealed class TopologyNormalizationServiceTests
             ],
         };
 
-        var exception = await Assert.ThrowsAsync<TopologyNormalizationException>(() => service.NormalizeAsync(document).AsTask());
+        var exception = await Assert.ThrowsAsync<TopologyNormalizationException>(() => topologyNormalizer.NormalizeAsync(topologyDocument).AsTask());
 
         Assert.Contains(exception.Issues, issue => issue.Code == "invalid-exchange-type");
     }

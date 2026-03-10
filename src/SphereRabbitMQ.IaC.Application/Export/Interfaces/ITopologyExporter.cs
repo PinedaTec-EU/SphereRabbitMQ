@@ -1,6 +1,6 @@
 using SphereRabbitMQ.IaC.Application.Models;
 
-namespace SphereRabbitMQ.IaC.Application.Abstractions;
+namespace SphereRabbitMQ.IaC.Application.Export.Interfaces;
 
 /// <summary>
 /// Exports current broker topology into a serializable document model.

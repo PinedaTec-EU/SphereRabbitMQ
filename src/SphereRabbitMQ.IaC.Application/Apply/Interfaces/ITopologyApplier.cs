@@ -1,6 +1,6 @@
 using SphereRabbitMQ.IaC.Domain.Planning;
 
-namespace SphereRabbitMQ.IaC.Application.Abstractions;
+namespace SphereRabbitMQ.IaC.Application.Apply.Interfaces;
 
 /// <summary>
 /// Applies a previously computed topology plan against the broker.
