@@ -1,0 +1,123 @@
+using SphereRabbitMQ.IaC.Application.Export.Interfaces;
+using SphereRabbitMQ.IaC.Application.Models;
+using SphereRabbitMQ.IaC.Infrastructure.Yaml.Contracts;
+using YamlDotNet.Serialization;
+using YamlDotNet.Serialization.NamingConventions;
+
+namespace SphereRabbitMQ.IaC.Infrastructure.Yaml.Export;
+
+/// <summary>
+/// Serializes topology documents to YAML.
+/// </summary>
+public sealed class TopologyYamlDocumentWriter : ITopologyDocumentWriter
+{
+    private readonly ISerializer _serializer;
+
+    /// <summary>
+    /// Creates a new YAML writer for topology documents.
+    /// </summary>
+    public TopologyYamlDocumentWriter()
+    {
+        _serializer = new SerializerBuilder()
+            .WithNamingConvention(CamelCaseNamingConvention.Instance)
+            .ConfigureDefaultValuesHandling(DefaultValuesHandling.OmitNull)
+            .Build();
+    }
+
+    /// <inheritdoc />
+    public ValueTask<string> WriteAsync(TopologyDocument document, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ArgumentNullException.ThrowIfNull(document);
+
+        var yamlDocument = new TopologyYamlDocument
+        {
+            Metadata = new Dictionary<string, string>(document.Metadata, StringComparer.Ordinal),
+            Naming = document.Naming is null
+                ? null
+                : new NamingConventionYamlDocument
+                {
+                    Separator = document.Naming.Separator,
+                    RetryExchangeSuffix = document.Naming.RetryExchangeSuffix,
+                    RetryQueueSuffix = document.Naming.RetryQueueSuffix,
+                    DeadLetterExchangeSuffix = document.Naming.DeadLetterExchangeSuffix,
+                    DeadLetterQueueSuffix = document.Naming.DeadLetterQueueSuffix,
+                    ParkingLotQueueSuffix = document.Naming.ParkingLotQueueSuffix,
+                    StepTokenPrefix = document.Naming.StepTokenPrefix,
+                },
+            VirtualHosts = document.VirtualHosts.Select(MapVirtualHost).ToList(),
+        };
+
+        return ValueTask.FromResult(_serializer.Serialize(yamlDocument));
+    }
+
+    private static VirtualHostYamlDocument MapVirtualHost(VirtualHostDocument document)
+        => new()
+        {
+            Name = document.Name,
+            Metadata = new Dictionary<string, string>(document.Metadata, StringComparer.Ordinal),
+            Exchanges = document.Exchanges.Select(MapExchange).ToList(),
+            Queues = document.Queues.Select(MapQueue).ToList(),
+            Bindings = document.Bindings.Select(MapBinding).ToList(),
+        };
+
+    private static ExchangeYamlDocument MapExchange(ExchangeDocument document)
+        => new()
+        {
+            Name = document.Name,
+            Type = document.Type,
+            Durable = document.Durable,
+            AutoDelete = document.AutoDelete,
+            Internal = document.Internal,
+            Arguments = new Dictionary<string, object?>(document.Arguments, StringComparer.Ordinal),
+            Metadata = new Dictionary<string, string>(document.Metadata, StringComparer.Ordinal),
+        };
+
+    private static QueueYamlDocument MapQueue(QueueDocument document)
+        => new()
+        {
+            Name = document.Name,
+            Type = document.Type,
+            Durable = document.Durable,
+            Exclusive = document.Exclusive,
+            AutoDelete = document.AutoDelete,
+            Arguments = new Dictionary<string, object?>(document.Arguments, StringComparer.Ordinal),
+            Metadata = new Dictionary<string, string>(document.Metadata, StringComparer.Ordinal),
+            DeadLetter = document.DeadLetter is null
+                ? null
+                : new DeadLetterYamlDocument
+                {
+                    Enabled = document.DeadLetter.Enabled,
+                    ExchangeName = document.DeadLetter.ExchangeName,
+                    QueueName = document.DeadLetter.QueueName,
+                    RoutingKey = document.DeadLetter.RoutingKey,
+                },
+            Retry = document.Retry is null
+                ? null
+                : new RetryYamlDocument
+                {
+                    Enabled = document.Retry.Enabled,
+                    AutoGenerateArtifacts = document.Retry.AutoGenerateArtifacts,
+                    ExchangeName = document.Retry.ExchangeName,
+                    ParkingLotQueueName = document.Retry.ParkingLotQueueName,
+                    Steps = document.Retry.Steps.Select(step => new RetryStepYamlDocument
+                    {
+                        Delay = step.Delay.ToString(),
+                        Name = step.Name,
+                        QueueName = step.QueueName,
+                        RoutingKey = step.RoutingKey,
+                    }).ToList(),
+                },
+        };
+
+    private static BindingYamlDocument MapBinding(BindingDocument document)
+        => new()
+        {
+            SourceExchange = document.SourceExchange,
+            Destination = document.Destination,
+            DestinationType = document.DestinationType,
+            RoutingKey = document.RoutingKey,
+            Arguments = new Dictionary<string, object?>(document.Arguments, StringComparer.Ordinal),
+            Metadata = new Dictionary<string, string>(document.Metadata, StringComparer.Ordinal),
+        };
+}

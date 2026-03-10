@@ -3,7 +3,7 @@
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <AssemblyName>SphereRabbitMQ.IaC.Cli</AssemblyName>
-    <ReleaseVersion>0.1.1.6</ReleaseVersion>
+    <ReleaseVersion>0.1.1.7</ReleaseVersion>
     <AssemblyVersion>$(ReleaseVersion)</AssemblyVersion>
     <FileVersion>$(ReleaseVersion)</FileVersion>
     <Version>$(ReleaseVersion)</Version>
@@ -12,6 +12,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="System.CommandLine" />
     <ProjectReference Include="..\SphereRabbitMQ.IaC.Application\SphereRabbitMQ.IaC.Application.csproj" />
     <ProjectReference Include="..\SphereRabbitMQ.IaC.Infrastructure.RabbitMQ\SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.csproj" />
     <ProjectReference Include="..\SphereRabbitMQ.IaC.Infrastructure.Yaml\SphereRabbitMQ.IaC.Infrastructure.Yaml.csproj" />

@@ -1,16 +1,26 @@
+using Microsoft.Extensions.DependencyInjection;
+using SphereRabbitMQ.IaC.Cli.Commands;
+using SphereRabbitMQ.IaC.Cli.DependencyInjection;
+
 namespace SphereRabbitMQ.IaC.Cli;
 
 /// <summary>
-/// Phase 2 keeps the CLI entry point minimal until command composition is introduced.
+/// Application entry point.
 /// </summary>
 public static class Program
 {
     /// <summary>
     /// Application entry point.
     /// </summary>
-    public static int Main(string[] args)
+    public static Task<int> Main(string[] args)
     {
         ArgumentNullException.ThrowIfNull(args);
-        return 0;
+
+        var services = new ServiceCollection()
+            .AddTopologyCli()
+            .BuildServiceProvider();
+
+        var rootCommand = TopologyRootCommandFactory.Create(services);
+        return rootCommand.Parse(args).InvokeAsync();
     }
 }
