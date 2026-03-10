@@ -3,7 +3,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
     <AssemblyName>SphereRabbitMQ.IaC.Tests.Integration</AssemblyName>
-    <ReleaseVersion>0.1.1.7</ReleaseVersion>
+    <ReleaseVersion>0.1.1.17</ReleaseVersion>
     <AssemblyVersion>$(ReleaseVersion)</AssemblyVersion>
     <FileVersion>$(ReleaseVersion)</FileVersion>
     <Version>$(ReleaseVersion)</Version>
