@@ -20,7 +20,6 @@
             "source.organizeImports"
         ]
     },
-    "dotnet.unitTests.runSettingsPath": "./tests/TravelAgent.Api.Tests/.runsettings",
     "chat.mcp.serverSampling": {
         "TravelAgent/.vscode/mcp.json: io.github.mongodb-js/mongodb-mcp-server": {}
     },

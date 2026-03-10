@@ -1,4 +1,5 @@
 using SphereRabbitMQ.IaC.Domain.Planning;
+using SphereRabbitMQ.IaC.Domain.Topology;
 
 namespace SphereRabbitMQ.IaC.Application.Apply.Interfaces;
 
@@ -10,5 +11,8 @@ public interface ITopologyApplier
     /// <summary>
     /// Applies the supplied reconciliation plan.
     /// </summary>
-    ValueTask ApplyAsync(TopologyPlan plan, CancellationToken cancellationToken = default);
+    ValueTask ApplyAsync(
+        TopologyDefinition desired,
+        TopologyPlan plan,
+        CancellationToken cancellationToken = default);
 }

@@ -1,0 +1,55 @@
+using SphereRabbitMQ.IaC.Domain.Topology;
+using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Management.Models;
+
+namespace SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Management.Interfaces;
+
+/// <summary>
+/// Abstraction over the RabbitMQ Management HTTP API.
+/// </summary>
+public interface IRabbitMqManagementApiClient
+{
+    /// <summary>
+    /// Reads available virtual hosts.
+    /// </summary>
+    ValueTask<IReadOnlyList<ManagementVirtualHostModel>> GetVirtualHostsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Reads exchanges for the specified virtual host.
+    /// </summary>
+    ValueTask<IReadOnlyList<ManagementExchangeModel>> GetExchangesAsync(string virtualHostName, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Reads queues for the specified virtual host.
+    /// </summary>
+    ValueTask<IReadOnlyList<ManagementQueueModel>> GetQueuesAsync(string virtualHostName, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Reads bindings for the specified virtual host.
+    /// </summary>
+    ValueTask<IReadOnlyList<ManagementBindingModel>> GetBindingsAsync(string virtualHostName, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Creates a virtual host when it does not exist.
+    /// </summary>
+    ValueTask CreateVirtualHostAsync(string virtualHostName, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Creates or updates an exchange definition.
+    /// </summary>
+    ValueTask UpsertExchangeAsync(string virtualHostName, ExchangeDefinition exchange, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Creates or updates a queue definition.
+    /// </summary>
+    ValueTask UpsertQueueAsync(string virtualHostName, QueueDefinition queue, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Creates a binding.
+    /// </summary>
+    ValueTask CreateBindingAsync(string virtualHostName, BindingDefinition binding, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Recreates a binding after removing existing bindings with the same key.
+    /// </summary>
+    ValueTask RebindAsync(string virtualHostName, BindingDefinition binding, CancellationToken cancellationToken = default);
+}
