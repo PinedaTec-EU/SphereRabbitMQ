@@ -32,6 +32,15 @@ public sealed class TopologyYamlDocumentWriter : ITopologyDocumentWriter
 
         var yamlDocument = new TopologyYamlDocument
         {
+            Broker = document.Broker is null
+                ? null
+                : new BrokerYamlDocument
+                {
+                    ManagementUrl = document.Broker.ManagementUrl,
+                    Username = document.Broker.Username,
+                    Password = document.Broker.Password,
+                    VirtualHosts = document.Broker.VirtualHosts.ToList(),
+                },
             Metadata = new Dictionary<string, string>(document.Metadata, StringComparer.Ordinal),
             Naming = document.Naming is null
                 ? null

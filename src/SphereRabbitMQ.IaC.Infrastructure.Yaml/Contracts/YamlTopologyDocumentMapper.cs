@@ -13,6 +13,15 @@ public static class YamlTopologyDocumentMapper
 
         return new TopologyDocument
         {
+            Broker = yamlDocument.Broker is null
+                ? null
+                : new BrokerDocument
+                {
+                    ManagementUrl = yamlDocument.Broker.ManagementUrl,
+                    Username = yamlDocument.Broker.Username,
+                    Password = yamlDocument.Broker.Password,
+                    VirtualHosts = yamlDocument.Broker.VirtualHosts.ToArray(),
+                },
             Metadata = new Dictionary<string, string>(yamlDocument.Metadata, StringComparer.Ordinal),
             Naming = yamlDocument.Naming is null
                 ? null

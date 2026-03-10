@@ -20,7 +20,16 @@ public sealed class TopologyYamlParserTests
 
         ITopologyParser topologyParser = new TopologyYamlParser(variableResolverMock.Object);
         var yaml = """
+        broker:
+          managementUrl: ${MANAGEMENT_URL}
+          username: ${USERNAME}
+          password: ${PASSWORD}
+          virtualHosts:
+            - ${VHOST_NAME}
         variables:
+          MANAGEMENT_URL: http://localhost:15672/api/
+          USERNAME: guest
+          PASSWORD: guest
           VHOST_NAME: sales
           EXCHANGE_NAME: orders
         virtualHosts:
@@ -35,6 +44,11 @@ public sealed class TopologyYamlParserTests
 
         Assert.Equal("sales", topologyDocument.VirtualHosts.Single().Name);
         Assert.Equal("orders", topologyDocument.VirtualHosts.Single().Exchanges.Single().Name);
+        Assert.NotNull(topologyDocument.Broker);
+        Assert.Equal("http://localhost:15672/api/", topologyDocument.Broker!.ManagementUrl);
+        Assert.Equal("guest", topologyDocument.Broker.Username);
+        Assert.Equal("guest", topologyDocument.Broker.Password);
+        Assert.Equal("sales", topologyDocument.Broker.VirtualHosts.Single());
         variableResolverMock.Verify(
             resolver => resolver.Resolve(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string?>>(), true),
             Times.AtLeastOnce);
