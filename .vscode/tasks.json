@@ -93,6 +93,32 @@
             }
         },
         {
+            "label": "publish sprmq cli",
+            "command": "dotnet",
+            "type": "process",
+            "args": [
+                "publish",
+                "${workspaceFolder}/src/SphereRabbitMQ.IaC.Cli/SphereRabbitMQ.IaC.Cli.csproj",
+                "-c",
+                "Release",
+                "--use-current-runtime",
+                "--self-contained",
+                "true",
+                "/p:PublishSingleFile=true",
+                "/p:EnableCompressionInSingleFile=true",
+                "/p:DebugType=None",
+                "/p:DebugSymbols=false",
+                "/p:GenerateDocumentationFile=false",
+                "-o",
+                "${workspaceFolder}/cli"
+            ],
+            "problemMatcher": "$msCompile",
+            "presentation": {
+                "reveal": "always"
+            },
+            "group": "none"
+        },
+        {
             "label": "Generate Coverage Report",
             "command": "reportgenerator",
             "type": "shell",
