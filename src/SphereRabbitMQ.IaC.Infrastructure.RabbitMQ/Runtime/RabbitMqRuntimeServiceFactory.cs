@@ -26,17 +26,20 @@ public sealed class RabbitMqRuntimeServiceFactory : IRabbitMqRuntimeServiceFacto
     private readonly ITopologyNormalizer _topologyNormalizer;
     private readonly ITopologyValidator _topologyValidator;
     private readonly ITopologyPlanner _topologyPlanner;
+    private readonly ITopologyDestroyPlanner _topologyDestroyPlanner;
 
     public RabbitMqRuntimeServiceFactory(
         ITopologyParser topologyParser,
         ITopologyNormalizer topologyNormalizer,
         ITopologyValidator topologyValidator,
-        ITopologyPlanner topologyPlanner)
+        ITopologyPlanner topologyPlanner,
+        ITopologyDestroyPlanner topologyDestroyPlanner)
     {
         _topologyParser = topologyParser;
         _topologyNormalizer = topologyNormalizer;
         _topologyValidator = topologyValidator;
         _topologyPlanner = topologyPlanner;
+        _topologyDestroyPlanner = topologyDestroyPlanner;
     }
 
     public RabbitMqRuntimeServices Create(RabbitMqManagementOptions options)
@@ -54,6 +57,7 @@ public sealed class RabbitMqRuntimeServiceFactory : IRabbitMqRuntimeServiceFacto
             _topologyValidator,
             brokerTopologyReader,
             _topologyPlanner,
+            _topologyDestroyPlanner,
             topologyApplier,
             topologyExporter);
 

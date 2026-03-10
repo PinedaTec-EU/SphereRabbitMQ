@@ -284,8 +284,6 @@ public sealed class TopologyPlannerService : ITopologyPlanner
         AddDiffIfChanged(diffs, resourcePath, TopologyResourceKind.Queue, "exclusive", desired.Exclusive.ToString(), actual.Exclusive.ToString());
         AddDiffIfChanged(diffs, resourcePath, TopologyResourceKind.Queue, "autoDelete", desired.AutoDelete.ToString(), actual.AutoDelete.ToString());
         AddDiffIfChanged(diffs, resourcePath, TopologyResourceKind.Queue, "arguments", Serialize(desired.Arguments), Serialize(actual.Arguments));
-        AddDiffIfChanged(diffs, resourcePath, TopologyResourceKind.Queue, "deadLetter", Serialize(desired.DeadLetter), Serialize(actual.DeadLetter));
-        AddDiffIfChanged(diffs, resourcePath, TopologyResourceKind.Queue, "retry", Serialize(desired.Retry), Serialize(actual.Retry));
         return diffs;
     }
 
@@ -298,7 +296,7 @@ public sealed class TopologyPlannerService : ITopologyPlanner
 
     private static bool HasImmutableQueueChange(IEnumerable<TopologyDiff> diffs)
         => diffs.Any(diff =>
-            diff.PropertyName is "type" or "durable" or "exclusive" or "autoDelete" or "arguments" or "deadLetter" or "retry");
+            diff.PropertyName is "type" or "durable" or "exclusive" or "autoDelete" or "arguments");
 
     private static void AddDiffIfChanged(
         ICollection<TopologyDiff> diffs,

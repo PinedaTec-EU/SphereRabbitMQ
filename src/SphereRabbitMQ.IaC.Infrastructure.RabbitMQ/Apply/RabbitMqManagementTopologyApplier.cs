@@ -55,6 +55,12 @@ public sealed class RabbitMqManagementTopologyApplier : ITopologyApplier
         var pathSegments = operation.ResourcePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
         var virtualHostName = pathSegments[1];
 
+        if (operation.Kind == TopologyPlanOperationKind.Destroy)
+        {
+            await DestroyOperationAsync(desired, operation, virtualHostName, pathSegments, cancellationToken);
+            return;
+        }
+
         switch (operation.ResourceKind)
         {
             case TopologyResourceKind.VirtualHost:
@@ -83,13 +89,51 @@ public sealed class RabbitMqManagementTopologyApplier : ITopologyApplier
         }
     }
 
+    private async ValueTask DestroyOperationAsync(
+        TopologyDefinition desired,
+        TopologyPlanOperation operation,
+        string virtualHostName,
+        string[] pathSegments,
+        CancellationToken cancellationToken)
+    {
+        switch (operation.ResourceKind)
+        {
+            case TopologyResourceKind.VirtualHost:
+                await _apiClient.DeleteVirtualHostAsync(virtualHostName, cancellationToken);
+                break;
+            case TopologyResourceKind.Exchange:
+                await _apiClient.DeleteExchangeAsync(virtualHostName, pathSegments[^1], cancellationToken);
+                break;
+            case TopologyResourceKind.Queue:
+                await _apiClient.DeleteQueueAsync(virtualHostName, pathSegments[^1], cancellationToken);
+                break;
+            case TopologyResourceKind.Binding:
+                await _apiClient.DeleteBindingAsync(virtualHostName, FindBinding(desired, virtualHostName, pathSegments[^1]), cancellationToken);
+                break;
+            default:
+                throw new InvalidOperationException($"Resource kind '{operation.ResourceKind}' is not supported.");
+        }
+    }
+
     private static int GetOperationOrder(TopologyPlanOperation operation)
+        => operation.Kind == TopologyPlanOperationKind.Destroy
+            ? GetDestroyOperationOrder(operation)
+            : operation.ResourceKind switch
+            {
+                TopologyResourceKind.VirtualHost => 0,
+                TopologyResourceKind.Exchange => 1,
+                TopologyResourceKind.Queue => 2,
+                TopologyResourceKind.Binding => 3,
+                _ => 10,
+            };
+
+    private static int GetDestroyOperationOrder(TopologyPlanOperation operation)
         => operation.ResourceKind switch
         {
-            TopologyResourceKind.VirtualHost => 0,
-            TopologyResourceKind.Exchange => 1,
-            TopologyResourceKind.Queue => 2,
-            TopologyResourceKind.Binding => 3,
+            TopologyResourceKind.Binding => 0,
+            TopologyResourceKind.Queue => 1,
+            TopologyResourceKind.Exchange => 2,
+            TopologyResourceKind.VirtualHost => 3,
             _ => 10,
         };
 

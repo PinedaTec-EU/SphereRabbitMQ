@@ -7,6 +7,7 @@ public enum TopologyPlanOperationKind
 {
     Create,
     Update,
+    Destroy,
     NoOp,
     DestructiveChange,
     UnsupportedChange,

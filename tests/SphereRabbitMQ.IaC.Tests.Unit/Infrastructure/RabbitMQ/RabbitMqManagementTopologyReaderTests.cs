@@ -50,4 +50,29 @@ public sealed class RabbitMqManagementTopologyReaderTests
         Assert.Equal(QueueType.Quorum, topologyDefinition.VirtualHosts.Single().Queues.Single().Type);
         Assert.Single(topologyDefinition.VirtualHosts.Single().Bindings);
     }
+
+    [Fact]
+    public async Task ReadAsync_SkipsManagedVirtualHost_WhenItDoesNotExist()
+    {
+        var apiClientMock = new Mock<IRabbitMqManagementApiClient>(MockBehavior.Strict);
+        apiClientMock.Setup(client => client.GetVirtualHostsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<ManagementVirtualHostModel>());
+
+        IBrokerTopologyReader brokerTopologyReader = new RabbitMqManagementTopologyReader(
+            apiClientMock.Object,
+            new RabbitMqManagementOptions
+            {
+                BaseUri = new Uri("http://localhost:15672/api/"),
+                Username = "guest",
+                Password = "guest",
+                ManagedVirtualHosts = ["sales"],
+            });
+
+        var topologyDefinition = await brokerTopologyReader.ReadAsync();
+
+        Assert.Empty(topologyDefinition.VirtualHosts);
+        apiClientMock.Verify(client => client.GetExchangesAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        apiClientMock.Verify(client => client.GetQueuesAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        apiClientMock.Verify(client => client.GetBindingsAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
 }

@@ -44,14 +44,29 @@ public interface IRabbitMqManagementApiClient
     ValueTask UpsertExchangeAsync(string virtualHostName, ExchangeDefinition exchange, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Deletes an exchange when it exists.
+    /// </summary>
+    ValueTask DeleteExchangeAsync(string virtualHostName, string exchangeName, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Creates or updates a queue definition.
     /// </summary>
     ValueTask UpsertQueueAsync(string virtualHostName, QueueDefinition queue, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Deletes a queue when it exists.
+    /// </summary>
+    ValueTask DeleteQueueAsync(string virtualHostName, string queueName, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Creates a binding.
     /// </summary>
     ValueTask CreateBindingAsync(string virtualHostName, BindingDefinition binding, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Deletes a binding when it exists.
+    /// </summary>
+    ValueTask DeleteBindingAsync(string virtualHostName, BindingDefinition binding, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Recreates a binding after removing existing bindings with the same key.

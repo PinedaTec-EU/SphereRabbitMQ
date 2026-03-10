@@ -31,10 +31,16 @@ public sealed class RabbitMqManagementTopologyReader : IBrokerTopologyReader
     public async ValueTask<TopologyDefinition> ReadAsync(CancellationToken cancellationToken = default)
     {
         var virtualHostNames = await ReadManagedVirtualHostNamesAsync(cancellationToken);
+        var existingVirtualHostNames = await ReadExistingVirtualHostNamesAsync(cancellationToken);
         var virtualHosts = new List<VirtualHostDefinition>();
 
         foreach (var virtualHostName in virtualHostNames.OrderBy(name => name, StringComparer.Ordinal))
         {
+            if (!existingVirtualHostNames.Contains(virtualHostName))
+            {
+                continue;
+            }
+
             var exchanges = await _apiClient.GetExchangesAsync(virtualHostName, cancellationToken);
             var queues = await _apiClient.GetQueuesAsync(virtualHostName, cancellationToken);
             var bindings = await _apiClient.GetBindingsAsync(virtualHostName, cancellationToken);
@@ -86,6 +92,14 @@ public sealed class RabbitMqManagementTopologyReader : IBrokerTopologyReader
 
         var virtualHosts = await _apiClient.GetVirtualHostsAsync(cancellationToken);
         return virtualHosts.Select(vhost => vhost.Name).OrderBy(name => name, StringComparer.Ordinal).ToArray();
+    }
+
+    private async ValueTask<HashSet<string>> ReadExistingVirtualHostNamesAsync(CancellationToken cancellationToken)
+    {
+        var virtualHosts = await _apiClient.GetVirtualHostsAsync(cancellationToken);
+        return virtualHosts
+            .Select(vhost => vhost.Name)
+            .ToHashSet(StringComparer.Ordinal);
     }
 
     private bool ShouldIncludeExchange(string exchangeName)
