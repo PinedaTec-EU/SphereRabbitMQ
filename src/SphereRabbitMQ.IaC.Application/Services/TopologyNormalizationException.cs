@@ -7,11 +7,11 @@ namespace SphereRabbitMQ.IaC.Application.Normalization;
 /// </summary>
 public sealed class TopologyNormalizationException : Exception
 {
+    public IReadOnlyList<TopologyIssue> Issues { get; }
+
     public TopologyNormalizationException(IReadOnlyList<TopologyIssue> issues)
         : base("Topology normalization failed.")
     {
         Issues = issues;
     }
-
-    public IReadOnlyList<TopologyIssue> Issues { get; }
 }

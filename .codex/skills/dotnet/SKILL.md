@@ -42,6 +42,13 @@ Otherwise, assume the standard layout:
 - SOLID principles must be followed.
 - Reuse-first rule: avoid adding new types, helpers, mappers, validators, or UI blocks when an existing focused abstraction can be reused or extended with low coupling.
 - Variables must be descriptive and clear, without being excessively long.
+- Member ordering rule: declare class elements in this order:
+  - constants (`const`, then `static readonly` metadata/config when kept local)
+  - properties
+  - fields/members
+  - constructors
+  - methods
+- Visibility ordering rule: inside each element group, order by visibility `public`, `protected`, `internal`, `private`.
 - The order of methods in classes must be: public, protected, internal, then private.
 - Private-member pressure rule: when a class or component grows beyond 16 private members, extract cohesive internal state into a dedicated `<Owner>Descriptor` record in a separate file. Descriptors are data-only records: no methods, no behavior. Move behavior to focused services/helpers/components and make the owner delegate to them instead of continuing to grow.
 - Magic numbers, strings, etc. must be avoided. Use `private const` when elements are exclusive to a class, or, if shared, a `XxxxConsts` class with `internal const` members and reduced visibility.

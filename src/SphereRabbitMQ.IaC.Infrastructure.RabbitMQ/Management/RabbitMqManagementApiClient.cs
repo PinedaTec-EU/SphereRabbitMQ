@@ -54,6 +54,10 @@ public sealed class RabbitMqManagementApiClient : IRabbitMqManagementApiClient
         => SendPutAsync($"vhosts/{Encode(virtualHostName)}", new { }, cancellationToken);
 
     /// <inheritdoc />
+    public ValueTask DeleteVirtualHostAsync(string virtualHostName, CancellationToken cancellationToken = default)
+        => SendDeleteAsync($"vhosts/{Encode(virtualHostName)}", cancellationToken, allowNotFound: true);
+
+    /// <inheritdoc />
     public ValueTask UpsertExchangeAsync(string virtualHostName, ExchangeDefinition exchange, CancellationToken cancellationToken = default)
         => SendPutAsync(
             $"exchanges/{Encode(virtualHostName)}/{Encode(exchange.Name)}",
@@ -139,9 +143,14 @@ public sealed class RabbitMqManagementApiClient : IRabbitMqManagementApiClient
         response.EnsureSuccessStatusCode();
     }
 
-    private async ValueTask SendDeleteAsync(string relativePath, CancellationToken cancellationToken)
+    private async ValueTask SendDeleteAsync(string relativePath, CancellationToken cancellationToken, bool allowNotFound = false)
     {
         using var response = await _httpClient.DeleteAsync(relativePath, cancellationToken);
+        if (allowNotFound && response.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return;
+        }
+
         response.EnsureSuccessStatusCode();
     }
 }

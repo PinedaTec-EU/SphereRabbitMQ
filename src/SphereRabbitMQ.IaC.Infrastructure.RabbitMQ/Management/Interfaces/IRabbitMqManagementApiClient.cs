@@ -34,6 +34,11 @@ public interface IRabbitMqManagementApiClient
     ValueTask CreateVirtualHostAsync(string virtualHostName, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Deletes a virtual host when it exists.
+    /// </summary>
+    ValueTask DeleteVirtualHostAsync(string virtualHostName, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Creates or updates an exchange definition.
     /// </summary>
     ValueTask UpsertExchangeAsync(string virtualHostName, ExchangeDefinition exchange, CancellationToken cancellationToken = default);
