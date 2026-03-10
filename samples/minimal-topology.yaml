@@ -1,0 +1,34 @@
+metadata:
+  owner: platform
+  service: ordering
+
+naming:
+  separator: "."
+  retryExchangeSuffix: "retry"
+  retryQueueSuffix: "retry"
+  deadLetterExchangeSuffix: "dlx"
+  deadLetterQueueSuffix: "dlq"
+  parkingLotQueueSuffix: "parking"
+
+virtualHosts:
+  - name: sales
+    exchanges:
+      - name: orders
+        type: topic
+        durable: true
+    queues:
+      - name: orders.created
+        type: quorum
+        durable: true
+        retry:
+          enabled: true
+          steps:
+            - name: fast
+              delay: "00:00:30"
+        deadLetter:
+          enabled: true
+    bindings:
+      - sourceExchange: orders
+        destination: orders.created
+        destinationType: queue
+        routingKey: "orders.created"

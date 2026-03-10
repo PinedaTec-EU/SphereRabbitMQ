@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>SphereRabbitMQ.IaC.Cli</AssemblyName>
+    <ReleaseVersion>0.1.1.3</ReleaseVersion>
+    <AssemblyVersion>$(ReleaseVersion)</AssemblyVersion>
+    <FileVersion>$(ReleaseVersion)</FileVersion>
+    <Version>$(ReleaseVersion)</Version>
+    <RootNamespace>SphereRabbitMQ.IaC.Cli</RootNamespace>
+    <Description>Command-line entry point for RabbitMQ topology infrastructure as code.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SphereRabbitMQ.IaC.Application\SphereRabbitMQ.IaC.Application.csproj" />
+    <ProjectReference Include="..\SphereRabbitMQ.IaC.Infrastructure.RabbitMQ\SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.csproj" />
+    <ProjectReference Include="..\SphereRabbitMQ.IaC.Infrastructure.Yaml\SphereRabbitMQ.IaC.Infrastructure.Yaml.csproj" />
+  </ItemGroup>
+</Project>

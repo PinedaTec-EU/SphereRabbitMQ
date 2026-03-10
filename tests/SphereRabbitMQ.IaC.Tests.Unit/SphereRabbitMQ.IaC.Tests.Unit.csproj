@@ -1,0 +1,25 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>SphereRabbitMQ.IaC.Tests.Unit</AssemblyName>
+    <RootNamespace>SphereRabbitMQ.IaC.Tests.Unit</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\SphereRabbitMQ.IaC.Application\SphereRabbitMQ.IaC.Application.csproj" />
+    <ProjectReference Include="..\..\src\SphereRabbitMQ.IaC.Domain\SphereRabbitMQ.IaC.Domain.csproj" />
+    <ProjectReference Include="..\..\src\SphereRabbitMQ.IaC.Infrastructure.Yaml\SphereRabbitMQ.IaC.Infrastructure.Yaml.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+</Project>

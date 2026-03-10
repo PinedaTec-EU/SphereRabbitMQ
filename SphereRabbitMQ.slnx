@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SphereRabbitMQ.IaC.Application/SphereRabbitMQ.IaC.Application.csproj" />
+    <Project Path="src/SphereRabbitMQ.IaC.Cli/SphereRabbitMQ.IaC.Cli.csproj" />
+    <Project Path="src/SphereRabbitMQ.IaC.Domain/SphereRabbitMQ.IaC.Domain.csproj" />
+    <Project Path="src/SphereRabbitMQ.IaC.Infrastructure.RabbitMQ/SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.csproj" />
+    <Project Path="src/SphereRabbitMQ.IaC.Infrastructure.Yaml/SphereRabbitMQ.IaC.Infrastructure.Yaml.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SphereRabbitMQ.IaC.Tests.Integration/SphereRabbitMQ.IaC.Tests.Integration.csproj" />
+    <Project Path="tests/SphereRabbitMQ.IaC.Tests.Unit/SphereRabbitMQ.IaC.Tests.Unit.csproj" />
+  </Folder>
+</Solution>
