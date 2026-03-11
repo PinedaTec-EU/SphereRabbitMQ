@@ -1,7 +1,7 @@
 using System.Reflection;
 
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
 using Moq;
@@ -237,7 +237,7 @@ public sealed class RabbitMqConsumersHostedServiceTests
     public async Task ExecuteAsync_SubscribesAllRegistrations()
     {
         var subscriberMock = new Mock<ISubscriber>();
-        var logger = Mock.Of<ILogger<RabbitMqConsumersHostedService>>();
+        var logger = NullLogger<RabbitMqConsumersHostedService>.Instance;
 
         subscriberMock
             .Setup(s => s.SubscribeAsync(It.IsAny<ConsumerDefinition<string>>(), It.IsAny<CancellationToken>()))
@@ -285,7 +285,7 @@ public sealed class RabbitMqTopologyValidationHostedServiceTests
     {
         var topologyValidatorMock = new Mock<IRabbitMqTopologyValidator>();
         var options = Options.Create(new SphereRabbitMqOptions { ValidateTopologyOnStartup = false });
-        var logger = Mock.Of<ILogger<RabbitMqTopologyValidationHostedService>>();
+        var logger = NullLogger<RabbitMqTopologyValidationHostedService>.Instance;
 
         var hostedService = new RabbitMqTopologyValidationHostedService(topologyValidatorMock.Object, options, logger);
 
@@ -299,7 +299,7 @@ public sealed class RabbitMqTopologyValidationHostedServiceTests
     {
         var topologyValidatorMock = new Mock<IRabbitMqTopologyValidator>();
         var options = Options.Create(new SphereRabbitMqOptions { ValidateTopologyOnStartup = true });
-        var logger = Mock.Of<ILogger<RabbitMqTopologyValidationHostedService>>();
+        var logger = NullLogger<RabbitMqTopologyValidationHostedService>.Instance;
 
         var hostedService = new RabbitMqTopologyValidationHostedService(topologyValidatorMock.Object, options, logger);
 
@@ -313,7 +313,7 @@ public sealed class RabbitMqTopologyValidationHostedServiceTests
     {
         var topologyValidatorMock = new Mock<IRabbitMqTopologyValidator>();
         var options = Options.Create(new SphereRabbitMqOptions { ValidateTopologyOnStartup = true });
-        var logger = Mock.Of<ILogger<RabbitMqTopologyValidationHostedService>>();
+        var logger = NullLogger<RabbitMqTopologyValidationHostedService>.Instance;
 
         var hostedService = new RabbitMqTopologyValidationHostedService(topologyValidatorMock.Object, options, logger);
 
