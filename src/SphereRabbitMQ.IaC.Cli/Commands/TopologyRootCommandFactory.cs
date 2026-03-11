@@ -1,7 +1,9 @@
 using System.CommandLine;
 using System.CommandLine.Invocation;
 using System.CommandLine.Parsing;
+
 using Microsoft.Extensions.DependencyInjection;
+
 using SphereRabbitMQ.IaC.Cli.Commands.Models;
 
 namespace SphereRabbitMQ.IaC.Cli.Commands;

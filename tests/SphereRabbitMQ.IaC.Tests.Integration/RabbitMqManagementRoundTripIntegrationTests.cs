@@ -1,6 +1,6 @@
 using SphereRabbitMQ.IaC.Application.Apply;
-using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Apply;
 using SphereRabbitMQ.IaC.Domain.Topology;
+using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Apply;
 
 namespace SphereRabbitMQ.IaC.Tests.Integration;
 

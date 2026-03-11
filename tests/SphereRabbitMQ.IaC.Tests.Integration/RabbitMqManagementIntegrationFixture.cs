@@ -1,3 +1,5 @@
+using System.Net.Sockets;
+
 using SphereRabbitMQ.IaC.Application.Apply.Interfaces;
 using SphereRabbitMQ.IaC.Application.Broker.Interfaces;
 using SphereRabbitMQ.IaC.Application.Export.Interfaces;
@@ -9,7 +11,6 @@ using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Export;
 using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Management;
 using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Management.Interfaces;
 using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Read;
-using System.Net.Sockets;
 
 namespace SphereRabbitMQ.IaC.Tests.Integration;
 

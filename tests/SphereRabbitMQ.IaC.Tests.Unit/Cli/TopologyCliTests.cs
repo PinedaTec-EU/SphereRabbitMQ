@@ -1,11 +1,12 @@
-using Microsoft.Extensions.DependencyInjection;
 using Moq;
+
 using SphereRabbitMQ.IaC.Application.Apply;
 using SphereRabbitMQ.IaC.Application.Export.Interfaces;
 using SphereRabbitMQ.IaC.Application.Models;
 using SphereRabbitMQ.IaC.Application.Normalization.Interfaces;
 using SphereRabbitMQ.IaC.Application.Parsing.Interfaces;
 using SphereRabbitMQ.IaC.Application.Validation.Interfaces;
+using SphereRabbitMQ.IaC.Application.Variables;
 using SphereRabbitMQ.IaC.Application.Workflows.Interfaces;
 using SphereRabbitMQ.IaC.Cli;
 using SphereRabbitMQ.IaC.Cli.Commands;
@@ -18,7 +19,6 @@ using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Management.Interfaces;
 using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Runtime;
 using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Runtime.Interfaces;
 using SphereRabbitMQ.IaC.Infrastructure.Yaml.Parsing;
-using SphereRabbitMQ.IaC.Application.Variables;
 
 namespace SphereRabbitMQ.IaC.Tests.Unit.Cli;
 

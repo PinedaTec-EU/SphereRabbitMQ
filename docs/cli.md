@@ -70,7 +70,7 @@ Reads desired topology, reads current broker state, and prints the reconciliatio
 
 Builds the execution plan and applies only safe operations.
 
-If the plan contains destructive or unsupported changes, `apply` stops and reports the blocking operations unless `--migrate` is provided.
+If the plan contains destructive or unsupported changes, `apply` stops and reports the blocking operations unless `--migrate` is provided
 
 ```bash
 ./cli/sprmq apply --file samples/minimal-topology.yaml

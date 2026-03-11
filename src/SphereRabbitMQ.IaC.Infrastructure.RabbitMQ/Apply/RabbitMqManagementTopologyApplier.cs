@@ -1,9 +1,10 @@
+using System.Text.Json;
+
 using SphereRabbitMQ.IaC.Application.Apply;
 using SphereRabbitMQ.IaC.Application.Apply.Interfaces;
 using SphereRabbitMQ.IaC.Domain.Planning;
 using SphereRabbitMQ.IaC.Domain.Topology;
 using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Management.Interfaces;
-using System.Text.Json;
 
 namespace SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Apply;
 

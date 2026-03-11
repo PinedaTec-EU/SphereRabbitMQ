@@ -1,7 +1,9 @@
+using System.Reflection;
+
 using SphereRabbitMQ.IaC.Application.Apply;
-using SphereRabbitMQ.IaC.Application.Normalization.Interfaces;
 using SphereRabbitMQ.IaC.Application.Export.Interfaces;
 using SphereRabbitMQ.IaC.Application.Normalization;
+using SphereRabbitMQ.IaC.Application.Normalization.Interfaces;
 using SphereRabbitMQ.IaC.Application.Parsing.Interfaces;
 using SphereRabbitMQ.IaC.Application.Validation.Interfaces;
 using SphereRabbitMQ.IaC.Cli.Commands.Interfaces;
@@ -10,7 +12,6 @@ using SphereRabbitMQ.IaC.Domain.Planning;
 using SphereRabbitMQ.IaC.Domain.Topology;
 using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Configuration;
 using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Runtime.Interfaces;
-using System.Reflection;
 
 namespace SphereRabbitMQ.IaC.Cli.Commands;
 
