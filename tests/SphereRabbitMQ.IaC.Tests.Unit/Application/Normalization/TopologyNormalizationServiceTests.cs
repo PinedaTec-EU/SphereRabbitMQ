@@ -13,6 +13,10 @@ public sealed class TopologyNormalizationServiceTests
         ITopologyNormalizer topologyNormalizer = new TopologyNormalizationService();
         var topologyDocument = new TopologyDocument
         {
+            DebugQueues = new DebugQueuesDocument
+            {
+                Enabled = true,
+            },
             VirtualHosts =
             [
                 new VirtualHostDocument
@@ -29,6 +33,7 @@ public sealed class TopologyNormalizationServiceTests
                         {
                             Name = "orders",
                             Type = "quorum",
+                            Ttl = "00:10:00",
                             Retry = new RetryDocument
                             {
                                 Steps =
@@ -48,9 +53,13 @@ public sealed class TopologyNormalizationServiceTests
 
         Assert.Equal(["a-vhost", "z-vhost"], topologyDefinition.VirtualHosts.Select(vhost => vhost.Name).ToArray());
         Assert.Equal(["audit", "events", "orders.retry"], topologyDefinition.VirtualHosts[1].Exchanges.Select(exchange => exchange.Name).ToArray());
+        Assert.Contains(topologyDefinition.VirtualHosts[1].Queues, queue => queue.Name == "audit.debug");
+        Assert.Contains(topologyDefinition.VirtualHosts[1].Queues, queue => queue.Name == "events.debug");
+        Assert.Contains(topologyDefinition.VirtualHosts[1].Bindings, binding => binding.Destination == "events.debug" && binding.RoutingKey == "#");
         Assert.Contains(topologyDefinition.VirtualHosts[1].Queues, queue => queue.Name == "orders.retry.fast");
         Assert.Contains(topologyDefinition.VirtualHosts[1].Queues, queue => queue.Name == "orders.retry.slow");
         Assert.Equal(QueueType.Quorum, topologyDefinition.VirtualHosts[1].Queues.Single(queue => queue.Name == "orders").Type);
+        Assert.Equal(600000L, topologyDefinition.VirtualHosts[1].Queues.Single(queue => queue.Name == "orders").Arguments["x-message-ttl"]);
     }
 
     [Fact]

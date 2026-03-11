@@ -46,6 +46,7 @@ public sealed class TopologyYamlParser : ITopologyParser
         => document with
         {
             Broker = ResolveBroker(document.Broker, document.Variables),
+            DebugQueues = ResolveDebugQueues(document.DebugQueues, document.Variables),
             Metadata = ResolveStringDictionary(document.Metadata, document.Variables),
             Variables = ResolveNullableStringDictionary(document.Variables, document.Variables),
             Naming = ResolveNaming(document.Naming, document.Variables),
@@ -95,11 +96,23 @@ public sealed class TopologyYamlParser : ITopologyParser
         {
             Name = Resolve(document.Name, variables),
             Type = Resolve(document.Type, variables),
+            Ttl = ResolveOptional(document.Ttl, variables),
             Arguments = ResolveObjectDictionary(document.Arguments, variables),
             Metadata = ResolveStringDictionary(document.Metadata, variables),
             DeadLetter = ResolveDeadLetter(document.DeadLetter, variables),
             Retry = ResolveRetry(document.Retry, variables),
         };
+
+    private DebugQueuesYamlDocument? ResolveDebugQueues(
+        DebugQueuesYamlDocument? document,
+        IReadOnlyDictionary<string, string?> variables)
+        => document is null
+            ? null
+            : document with
+            {
+                QueueSuffix = Resolve(document.QueueSuffix, variables),
+                RoutingKey = Resolve(document.RoutingKey, variables),
+            };
 
     private BindingYamlDocument ResolveBinding(
         BindingYamlDocument document,

@@ -15,6 +15,8 @@ public sealed record QueueYamlDocument
 
     public bool AutoDelete { get; init; }
 
+    public string? Ttl { get; init; }
+
     public Dictionary<string, object?> Arguments { get; init; } = new(StringComparer.Ordinal);
 
     public DeadLetterYamlDocument? DeadLetter { get; init; }

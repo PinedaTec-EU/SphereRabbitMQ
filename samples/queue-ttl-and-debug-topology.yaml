@@ -1,0 +1,36 @@
+broker:
+  managementUrl: http://localhost:31672/api/
+  username: admin
+  password: qwerty12345
+  virtualHosts:
+    - sales
+
+debugQueues:
+  enabled: true
+  queueSuffix: debug
+  routingKey: "#"
+  durable: true
+
+metadata:
+  owner: platform
+  service: ordering
+
+virtualHosts:
+  - name: sales
+    exchanges:
+      - name: orders
+        type: topic
+        durable: true
+      - name: payments
+        type: topic
+        durable: true
+    queues:
+      - name: orders.created
+        type: quorum
+        durable: true
+        ttl: "00:10:00"
+    bindings:
+      - sourceExchange: orders
+        destination: orders.created
+        destinationType: queue
+        routingKey: "orders.created"

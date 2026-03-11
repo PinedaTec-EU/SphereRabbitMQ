@@ -9,6 +9,8 @@ public sealed record TopologyYamlDocument
 
     public List<VirtualHostYamlDocument> VirtualHosts { get; init; } = new();
 
+    public DebugQueuesYamlDocument? DebugQueues { get; init; }
+
     public NamingConventionYamlDocument? Naming { get; init; }
 
     public Dictionary<string, string> Metadata { get; init; } = new(StringComparer.Ordinal);
