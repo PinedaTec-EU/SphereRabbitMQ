@@ -100,10 +100,10 @@ jobs:
       - name: Unit tests
         run: |
           dotnet test tests/SphereRabbitMQ.Tests.Unit/SphereRabbitMQ.Tests.Unit.csproj \
-            -c Release --no-restore \
+            -c Release --no-build \
             --logger "console;verbosity=normal"
           dotnet test tests/SphereRabbitMQ.IaC.Tests.Unit/SphereRabbitMQ.IaC.Tests.Unit.csproj \
-            -c Release --no-restore \
+            -c Release --no-build \
             --logger "console;verbosity=normal"
 
       # Pack the all-in-one runtime package.
@@ -113,7 +113,7 @@ jobs:
           VERSION=${{ steps.version.outputs.VERSION }}
           dotnet pack src/SphereRabbitMQ.DependencyInjection/SphereRabbitMQ.DependencyInjection.csproj \
             -c Release \
-            --no-build \
+            --no-restore \
             -p:Version=$VERSION \
             --output nupkgs
 
