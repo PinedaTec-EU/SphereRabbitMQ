@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 using SphereRabbitMQ.IaC.Domain.Internal;
 
 namespace SphereRabbitMQ.IaC.Domain.Topology;
@@ -5,6 +7,7 @@ namespace SphereRabbitMQ.IaC.Domain.Topology;
 /// <summary>
 /// Describes the dead-letter behavior for a queue.
 /// </summary>
+[ExcludeFromCodeCoverage]
 public sealed record DeadLetterDefinition
 {
     public DeadLetterDefinition(

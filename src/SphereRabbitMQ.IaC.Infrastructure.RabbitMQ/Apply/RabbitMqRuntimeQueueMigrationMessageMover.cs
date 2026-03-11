@@ -1,9 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
-using SphereRabbitMQ.Abstractions.Configuration;
+
 using SphereRabbitMQ.DependencyInjection;
-using SphereRabbitMQ.Infrastructure.RabbitMQ.Migration.Interfaces;
 using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Configuration;
+using SphereRabbitMQ.Infrastructure.RabbitMQ.Migration.Interfaces;
 
 namespace SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Apply;
 

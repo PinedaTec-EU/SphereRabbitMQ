@@ -74,4 +74,57 @@ public sealed class DefaultRetryPolicyResolverTests
         Assert.False(decision.ShouldRetry);
         Assert.Equal(2, decision.NextRetryCount);
     }
+
+    [Fact]
+    public void Resolve_ReturnsNoRetry_WhenRetryRouteIsMissing()
+    {
+        var resolver = new DefaultRetryPolicyResolver();
+        var settings = new ConsumerErrorHandlingSettings
+        {
+            Strategy = ConsumerErrorStrategyKind.RetryOnly,
+            MaxRetryAttempts = 5,
+            RetryRoute = null,
+        };
+
+        var decision = resolver.Resolve(settings, RetryMetadata.None, new InvalidOperationException("boom"));
+
+        Assert.False(decision.ShouldRetry);
+        Assert.Equal(1, decision.NextRetryCount);
+    }
+
+    [Fact]
+    public void Resolve_ReturnsNoRetry_WhenMaxAttemptsIsReached()
+    {
+        var resolver = new DefaultRetryPolicyResolver();
+        var settings = new ConsumerErrorHandlingSettings
+        {
+            Strategy = ConsumerErrorStrategyKind.RetryThenDeadLetter,
+            MaxRetryAttempts = 2,
+            RetryRoute = new RetryRouteDefinition("orders.retry", "orders.created.retry"),
+        };
+
+        var decision = resolver.Resolve(settings, new RetryMetadata(2), new InvalidOperationException("boom"));
+
+        Assert.False(decision.ShouldRetry);
+        Assert.Equal(3, decision.NextRetryCount);
+    }
+
+    [Theory]
+    [InlineData(ConsumerErrorStrategyKind.DeadLetterOnly)]
+    [InlineData(ConsumerErrorStrategyKind.Discard)]
+    public void Resolve_ReturnsNoRetry_WhenStrategyDoesNotAllowRetry(ConsumerErrorStrategyKind strategy)
+    {
+        var resolver = new DefaultRetryPolicyResolver();
+        var settings = new ConsumerErrorHandlingSettings
+        {
+            Strategy = strategy,
+            MaxRetryAttempts = 5,
+            RetryRoute = new RetryRouteDefinition("orders.retry", "orders.created.retry"),
+        };
+
+        var decision = resolver.Resolve(settings, RetryMetadata.None, new InvalidOperationException("boom"));
+
+        Assert.False(decision.ShouldRetry);
+        Assert.Equal(1, decision.NextRetryCount);
+    }
 }

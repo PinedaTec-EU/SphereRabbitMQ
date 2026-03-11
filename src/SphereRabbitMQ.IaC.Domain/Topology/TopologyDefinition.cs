@@ -120,62 +120,113 @@ public sealed record TopologyDefinition
         ICollection<TopologyIssue> issues)
     {
         var path = $"/virtualHosts/{virtualHostName}/queues/{queue.Name}";
-        if (queue.Type == QueueType.Quorum && (queue.Exclusive || queue.AutoDelete))
+        ValidateQuorumQueueFlags(queue, path, issues);
+        ValidateQueueTypeArgument(queue, path, issues);
+        RegisterDeadLetterGeneratedNames(queue, namingPolicy, path, generatedNames, issues);
+        ValidateRetryConfiguration(queue, namingPolicy, path, generatedNames, issues);
+    }
+
+    private static void ValidateQuorumQueueFlags(
+        QueueDefinition queue,
+        string path,
+        ICollection<TopologyIssue> issues)
+    {
+        if (queue.Type != QueueType.Quorum || (!queue.Exclusive && !queue.AutoDelete))
+        {
+            return;
+        }
+
+        issues.Add(new TopologyIssue(
+            "invalid-quorum-queue",
+            "Quorum queues cannot be exclusive or auto-delete.",
+            path,
+            TopologyIssueSeverity.Error));
+    }
+
+    private static void ValidateQueueTypeArgument(
+        QueueDefinition queue,
+        string path,
+        ICollection<TopologyIssue> issues)
+    {
+        if (!queue.Arguments.TryGetValue("x-queue-type", out var queueTypeArgument) ||
+            queueTypeArgument is not string stringValue ||
+            string.Equals(stringValue, queue.Type.ToString(), StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        issues.Add(new TopologyIssue(
+            "queue-type-argument-mismatch",
+            "Queue type conflicts with x-queue-type argument.",
+            path,
+            TopologyIssueSeverity.Error));
+    }
+
+    private static void RegisterDeadLetterGeneratedNames(
+        QueueDefinition queue,
+        NamingConventionPolicy namingPolicy,
+        string path,
+        ISet<string> generatedNames,
+        ICollection<TopologyIssue> issues)
+    {
+        if (queue.DeadLetter is not { Enabled: true })
+        {
+            return;
+        }
+
+        RegisterGeneratedName(queue.DeadLetter.ExchangeName ?? namingPolicy.GetDeadLetterExchangeName(queue.Name), path, generatedNames, issues);
+        RegisterGeneratedName(queue.DeadLetter.QueueName ?? namingPolicy.GetDeadLetterQueueName(queue.Name), path, generatedNames, issues);
+    }
+
+    private static void ValidateRetryConfiguration(
+        QueueDefinition queue,
+        NamingConventionPolicy namingPolicy,
+        string path,
+        ISet<string> generatedNames,
+        ICollection<TopologyIssue> issues)
+    {
+        if (queue.Retry is not { Enabled: true } retry)
+        {
+            return;
+        }
+
+        ValidateRetrySteps(queue.Name, retry, namingPolicy, path, generatedNames, issues);
+        RegisterGeneratedName(retry.ExchangeName ?? namingPolicy.GetRetryExchangeName(queue.Name), path, generatedNames, issues);
+        RegisterGeneratedName(retry.ParkingLotQueueName ?? namingPolicy.GetParkingLotQueueName(queue.Name), path, generatedNames, issues);
+    }
+
+    private static void ValidateRetrySteps(
+        string queueName,
+        RetryDefinition retry,
+        NamingConventionPolicy namingPolicy,
+        string path,
+        ISet<string> generatedNames,
+        ICollection<TopologyIssue> issues)
+    {
+        if (retry.Steps.Count == 0)
         {
             issues.Add(new TopologyIssue(
-                "invalid-quorum-queue",
-                "Quorum queues cannot be exclusive or auto-delete.",
+                "retry-missing-steps",
+                "Retry configuration must declare at least one step when enabled.",
                 path,
                 TopologyIssueSeverity.Error));
         }
 
-        if (queue.Arguments.TryGetValue("x-queue-type", out var queueTypeArgument) &&
-            queueTypeArgument is string stringValue &&
-            !string.Equals(stringValue, queue.Type.ToString(), StringComparison.OrdinalIgnoreCase))
+        var stepNames = new HashSet<string>(StringComparer.Ordinal);
+        for (var index = 0; index < retry.Steps.Count; index++)
         {
-            issues.Add(new TopologyIssue(
-                "queue-type-argument-mismatch",
-                "Queue type conflicts with x-queue-type argument.",
-                path,
-                TopologyIssueSeverity.Error));
-        }
-
-        if (queue.DeadLetter is { Enabled: true })
-        {
-            RegisterGeneratedName(queue.DeadLetter.ExchangeName ?? namingPolicy.GetDeadLetterExchangeName(queue.Name), path, generatedNames, issues);
-            RegisterGeneratedName(queue.DeadLetter.QueueName ?? namingPolicy.GetDeadLetterQueueName(queue.Name), path, generatedNames, issues);
-        }
-
-        if (queue.Retry is { Enabled: true } retry)
-        {
-            if (retry.Steps.Count == 0)
+            var step = retry.Steps[index];
+            var stepName = step.Name ?? namingPolicy.GetRetryStepToken(index);
+            if (!stepNames.Add(stepName))
             {
                 issues.Add(new TopologyIssue(
-                    "retry-missing-steps",
-                    "Retry configuration must declare at least one step when enabled.",
+                    "duplicate-retry-step",
+                    $"Retry step '{stepName}' is declared more than once.",
                     path,
                     TopologyIssueSeverity.Error));
             }
 
-            var stepNames = new HashSet<string>(StringComparer.Ordinal);
-            for (var index = 0; index < retry.Steps.Count; index++)
-            {
-                var step = retry.Steps[index];
-                var stepName = step.Name ?? namingPolicy.GetRetryStepToken(index);
-                if (!stepNames.Add(stepName))
-                {
-                    issues.Add(new TopologyIssue(
-                        "duplicate-retry-step",
-                        $"Retry step '{stepName}' is declared more than once.",
-                        path,
-                        TopologyIssueSeverity.Error));
-                }
-
-                RegisterGeneratedName(step.QueueName ?? namingPolicy.GetRetryQueueName(queue.Name, stepName), path, generatedNames, issues);
-            }
-
-            RegisterGeneratedName(retry.ExchangeName ?? namingPolicy.GetRetryExchangeName(queue.Name), path, generatedNames, issues);
-            RegisterGeneratedName(retry.ParkingLotQueueName ?? namingPolicy.GetParkingLotQueueName(queue.Name), path, generatedNames, issues);
+            RegisterGeneratedName(step.QueueName ?? namingPolicy.GetRetryQueueName(queueName, stepName), path, generatedNames, issues);
         }
     }
 

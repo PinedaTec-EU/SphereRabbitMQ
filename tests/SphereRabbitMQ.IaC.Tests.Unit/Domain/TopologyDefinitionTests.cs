@@ -56,4 +56,34 @@ public sealed class TopologyDefinitionTests
         Assert.False(result.IsValid);
         Assert.Contains(result.Issues, issue => issue.Code == "generated-name-collision");
     }
+
+    [Fact]
+    public void Validate_ReturnsValid_WhenGeneratedArtifactsAreUnique()
+    {
+        var queueOne = new QueueDefinition(
+            "orders",
+            retry: new RetryDefinition(
+            [
+                new RetryStepDefinition(TimeSpan.FromMinutes(1), name: "fast"),
+            ],
+            exchangeName: "orders.retry"));
+
+        var queueTwo = new QueueDefinition(
+            "payments",
+            retry: new RetryDefinition(
+            [
+                new RetryStepDefinition(TimeSpan.FromMinutes(2), name: "slow"),
+            ],
+            exchangeName: "payments.retry"));
+
+        var topology = new TopologyDefinition(
+        [
+            new VirtualHostDefinition("sales", queues: [queueOne, queueTwo]),
+        ]);
+
+        var result = topology.Validate();
+
+        Assert.True(result.IsValid);
+        Assert.DoesNotContain(result.Issues, issue => issue.Code == "generated-name-collision");
+    }
 }

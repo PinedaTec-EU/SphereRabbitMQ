@@ -89,4 +89,98 @@ public sealed class TopologyNormalizationServiceTests
 
         Assert.Contains(exception.Issues, issue => issue.Code == "invalid-exchange-type");
     }
+
+    [Fact]
+    public async Task NormalizeAsync_Throws_WhenQueueTtlIsInvalid()
+    {
+        ITopologyNormalizer topologyNormalizer = new TopologyNormalizationService();
+        var topologyDocument = new TopologyDocument
+        {
+            VirtualHosts =
+            [
+                new VirtualHostDocument
+                {
+                    Name = "sales",
+                    Queues =
+                    [
+                        new QueueDocument
+                        {
+                            Name = "orders",
+                            Ttl = "-00:00:01",
+                        },
+                    ],
+                },
+            ],
+        };
+
+        var exception = await Assert.ThrowsAsync<TopologyNormalizationException>(() => topologyNormalizer.NormalizeAsync(topologyDocument).AsTask());
+
+        Assert.Contains(exception.Issues, issue => issue.Code == "invalid-queue-ttl");
+    }
+
+    [Fact]
+    public async Task NormalizeAsync_Throws_WhenDerivedArgumentsConflict()
+    {
+        ITopologyNormalizer topologyNormalizer = new TopologyNormalizationService();
+        var topologyDocument = new TopologyDocument
+        {
+            VirtualHosts =
+            [
+                new VirtualHostDocument
+                {
+                    Name = "sales",
+                    Queues =
+                    [
+                        new QueueDocument
+                        {
+                            Name = "orders",
+                            DeadLetter = new DeadLetterDocument { Enabled = true },
+                            Arguments = new Dictionary<string, object?>(StringComparer.Ordinal)
+                            {
+                                ["x-dead-letter-exchange"] = "custom.exchange",
+                            },
+                        },
+                    ],
+                },
+            ],
+        };
+
+        var exception = await Assert.ThrowsAsync<TopologyNormalizationException>(() => topologyNormalizer.NormalizeAsync(topologyDocument).AsTask());
+
+        Assert.Contains(exception.Issues, issue => issue.Code == "conflicting-derived-argument");
+    }
+
+    [Fact]
+    public async Task NormalizeAsync_GeneratesDeadLetterArtifacts_WhenDeadLetterEnabledWithoutRetry()
+    {
+        ITopologyNormalizer topologyNormalizer = new TopologyNormalizationService();
+        var topologyDocument = new TopologyDocument
+        {
+            VirtualHosts =
+            [
+                new VirtualHostDocument
+                {
+                    Name = "sales",
+                    Queues =
+                    [
+                        new QueueDocument
+                        {
+                            Name = "orders",
+                            DeadLetter = new DeadLetterDocument { Enabled = true },
+                        },
+                    ],
+                },
+            ],
+        };
+
+        var topologyDefinition = await topologyNormalizer.NormalizeAsync(topologyDocument);
+        var virtualHost = topologyDefinition.VirtualHosts.Single();
+
+        Assert.Contains(virtualHost.Exchanges, exchange => exchange.Name == "orders.dlx");
+        Assert.Contains(virtualHost.Queues, queue => queue.Name == "orders.dlq");
+        Assert.Contains(virtualHost.Bindings, binding =>
+            binding.SourceExchange == "orders.dlx" &&
+            binding.Destination == "orders.dlq" &&
+            binding.RoutingKey == "orders");
+    }
 }
