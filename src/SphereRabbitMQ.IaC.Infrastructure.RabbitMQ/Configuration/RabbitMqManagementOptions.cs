@@ -21,6 +21,21 @@ public sealed record RabbitMqManagementOptions
     public required string Password { get; init; }
 
     /// <summary>
+    /// Optional AMQP host override used by runtime-assisted migration flows.
+    /// </summary>
+    public string? AmqpHostName { get; init; }
+
+    /// <summary>
+    /// Optional AMQP port used by runtime-assisted migration flows. Defaults to <c>5672</c>.
+    /// </summary>
+    public int AmqpPort { get; init; } = 5672;
+
+    /// <summary>
+    /// Optional AMQP virtual host override used by runtime-assisted migration flows. Defaults to <c>/</c>.
+    /// </summary>
+    public string AmqpVirtualHost { get; init; } = "/";
+
+    /// <summary>
     /// Optional explicit list of virtual hosts to manage.
     /// </summary>
     public IReadOnlyCollection<string> ManagedVirtualHosts { get; init; } = Array.Empty<string>();

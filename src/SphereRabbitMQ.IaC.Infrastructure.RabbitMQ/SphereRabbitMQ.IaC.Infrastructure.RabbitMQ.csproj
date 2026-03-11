@@ -14,5 +14,8 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <ProjectReference Include="..\SphereRabbitMQ.IaC.Application\SphereRabbitMQ.IaC.Application.csproj" />
     <ProjectReference Include="..\SphereRabbitMQ.IaC.Domain\SphereRabbitMQ.IaC.Domain.csproj" />
+    <ProjectReference Include="..\SphereRabbitMQ.Abstractions\SphereRabbitMQ.Abstractions.csproj" />
+    <ProjectReference Include="..\SphereRabbitMQ.DependencyInjection\SphereRabbitMQ.DependencyInjection.csproj" />
+    <ProjectReference Include="..\SphereRabbitMQ.Infrastructure.RabbitMQ\SphereRabbitMQ.Infrastructure.RabbitMQ.csproj" />
   </ItemGroup>
 </Project>

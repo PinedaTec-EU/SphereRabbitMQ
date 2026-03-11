@@ -1,3 +1,4 @@
+using SphereRabbitMQ.IaC.Application.Apply;
 using SphereRabbitMQ.IaC.Domain.Planning;
 using SphereRabbitMQ.IaC.Domain.Topology;
 
@@ -14,5 +15,6 @@ public interface ITopologyApplier
     ValueTask ApplyAsync(
         TopologyDefinition desired,
         TopologyPlan plan,
+        TopologyApplyOptions? options = null,
         CancellationToken cancellationToken = default);
 }

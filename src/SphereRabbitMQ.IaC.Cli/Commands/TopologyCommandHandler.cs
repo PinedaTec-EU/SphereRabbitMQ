@@ -1,3 +1,4 @@
+using SphereRabbitMQ.IaC.Application.Apply;
 using SphereRabbitMQ.IaC.Application.Normalization.Interfaces;
 using SphereRabbitMQ.IaC.Application.Export.Interfaces;
 using SphereRabbitMQ.IaC.Application.Normalization;
@@ -145,6 +146,7 @@ internal sealed class TopologyCommandHandler
         BrokerOptionsInput brokerOptionsInput,
         TopologyOutputFormat outputFormat,
         bool dryRun,
+        bool migrate,
         bool verbose,
         CancellationToken cancellationToken)
     {
@@ -180,7 +182,7 @@ internal sealed class TopologyCommandHandler
                 return CommandExitCodes.ValidationFailed;
             }
 
-            if (!result.Plan.CanApply || result.Plan.DestructiveChanges.Count > 0)
+            if ((!result.Plan.CanApply || result.Plan.DestructiveChanges.Count > 0) && (!migrate || dryRun))
             {
                 WriteVerbose(outputFormat, verbose, "Blocking plan operations detected.");
                 return CommandExitCodes.UnsupportedPlan;
@@ -192,8 +194,13 @@ internal sealed class TopologyCommandHandler
             }
 
             stream.Position = 0;
-            WriteVerbose(outputFormat, verbose, "Phase: executing safe apply operations.");
-            await runtimeServices.TopologyWorkflowService.ApplyAsync(stream, cancellationToken);
+            WriteVerbose(outputFormat, verbose, migrate
+                ? "Phase: executing apply operations with broker migration support."
+                : "Phase: executing safe apply operations.");
+            await runtimeServices.TopologyWorkflowService.ApplyAsync(
+                stream,
+                migrate ? new TopologyApplyOptions { AllowMigrations = true } : TopologyApplyOptions.Safe,
+                cancellationToken);
             return CommandExitCodes.Success;
         }
         catch (TopologyNormalizationException exception)

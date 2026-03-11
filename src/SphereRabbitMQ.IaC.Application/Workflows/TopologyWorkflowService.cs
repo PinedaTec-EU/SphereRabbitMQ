@@ -1,3 +1,4 @@
+using SphereRabbitMQ.IaC.Application.Apply;
 using SphereRabbitMQ.IaC.Application.Apply.Interfaces;
 using SphereRabbitMQ.IaC.Application.Broker.Interfaces;
 using SphereRabbitMQ.IaC.Application.Export.Interfaces;
@@ -81,6 +82,7 @@ public sealed class TopologyWorkflowService : ITopologyWorkflowService
 
     public async ValueTask<(TopologyDefinition Definition, TopologyValidationResult Validation, TopologyPlan Plan)> ApplyAsync(
         Stream stream,
+        TopologyApplyOptions? options = null,
         CancellationToken cancellationToken = default)
     {
         var (definition, validation, plan) = await PlanAsync(stream, cancellationToken);
@@ -89,7 +91,7 @@ public sealed class TopologyWorkflowService : ITopologyWorkflowService
             return (definition, validation, plan);
         }
 
-        await _topologyApplier.ApplyAsync(definition, plan, cancellationToken);
+        await _topologyApplier.ApplyAsync(definition, plan, options ?? TopologyApplyOptions.Safe, cancellationToken);
         return (definition, validation, plan);
     }
 
@@ -120,7 +122,7 @@ public sealed class TopologyWorkflowService : ITopologyWorkflowService
             return (definition, validation, plan);
         }
 
-        await _topologyApplier.ApplyAsync(definition, plan, cancellationToken);
+        await _topologyApplier.ApplyAsync(definition, plan, TopologyApplyOptions.Safe, cancellationToken);
         return (definition, validation, plan);
     }
 

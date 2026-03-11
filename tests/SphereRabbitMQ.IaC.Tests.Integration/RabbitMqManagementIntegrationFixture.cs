@@ -9,6 +9,7 @@ using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Export;
 using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Management;
 using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Management.Interfaces;
 using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Read;
+using System.Net.Sockets;
 
 namespace SphereRabbitMQ.IaC.Tests.Integration;
 
@@ -31,6 +32,10 @@ public sealed class RabbitMqManagementIntegrationFixture : IAsyncLifetime, IDisp
     public ITopologyPlanner TopologyPlanner { get; }
 
     public ITopologyDestroyPlanner TopologyDestroyPlanner { get; }
+
+    public bool SupportsRuntimeQueueMigration { get; private set; }
+
+    private readonly RabbitMqRuntimeQueueMigrationMessageMover? _queueMigrationMessageMover;
 
     private readonly HttpClient _httpClient;
 
@@ -66,12 +71,16 @@ public sealed class RabbitMqManagementIntegrationFixture : IAsyncLifetime, IDisp
             BaseUri = settings.BaseUri,
             Username = settings.Username,
             Password = settings.Password,
+            AmqpHostName = settings.AmqpHostName,
+            AmqpPort = settings.AmqpPort,
+            AmqpVirtualHost = settings.AmqpVirtualHost,
             ManagedVirtualHosts = [VirtualHostName],
         };
 
         ApiClient = new RabbitMqManagementApiClient(_httpClient, Options);
         BrokerTopologyReader = new RabbitMqManagementTopologyReader(ApiClient, Options);
-        TopologyApplier = new RabbitMqManagementTopologyApplier(ApiClient);
+        _queueMigrationMessageMover = new RabbitMqRuntimeQueueMigrationMessageMover(Options);
+        TopologyApplier = new RabbitMqManagementTopologyApplier(ApiClient, _queueMigrationMessageMover);
         TopologyExporter = new RabbitMqManagementTopologyExporter(BrokerTopologyReader);
         TopologyPlanner = new TopologyPlannerService();
         TopologyDestroyPlanner = new TopologyDestroyPlannerService();
@@ -85,6 +94,7 @@ public sealed class RabbitMqManagementIntegrationFixture : IAsyncLifetime, IDisp
         }
 
         await ResetVirtualHostAsync();
+        SupportsRuntimeQueueMigration = await CanReachAmqpAsync();
     }
 
     public async Task DisposeAsync()
@@ -95,6 +105,10 @@ public sealed class RabbitMqManagementIntegrationFixture : IAsyncLifetime, IDisp
         }
 
         await ApiClient.DeleteVirtualHostAsync(VirtualHostName);
+        if (_queueMigrationMessageMover is not null)
+        {
+            await _queueMigrationMessageMover.DisposeAsync();
+        }
     }
 
     public void Dispose()
@@ -111,5 +125,20 @@ public sealed class RabbitMqManagementIntegrationFixture : IAsyncLifetime, IDisp
 
         await ApiClient.DeleteVirtualHostAsync(VirtualHostName, cancellationToken);
         await ApiClient.CreateVirtualHostAsync(VirtualHostName, cancellationToken);
+    }
+
+    private async Task<bool> CanReachAmqpAsync()
+    {
+        using var tcpClient = new TcpClient();
+
+        try
+        {
+            await tcpClient.ConnectAsync(Options.AmqpHostName ?? Options.BaseUri.Host, Options.AmqpPort);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 }

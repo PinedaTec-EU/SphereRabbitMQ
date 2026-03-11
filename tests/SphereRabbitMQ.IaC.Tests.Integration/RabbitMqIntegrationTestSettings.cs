@@ -5,11 +5,17 @@ namespace SphereRabbitMQ.IaC.Tests.Integration;
 internal sealed record RabbitMqIntegrationTestSettings(
     Uri BaseUri,
     string Username,
-    string Password)
+    string Password,
+    string? AmqpHostName,
+    int AmqpPort,
+    string AmqpVirtualHost)
 {
     private const string BaseUriVariable = "SPHERE_RABBITMQ_MANAGEMENT_URL";
     private const string UsernameVariable = "SPHERE_RABBITMQ_USERNAME";
     private const string PasswordVariable = "SPHERE_RABBITMQ_PASSWORD";
+    private const string AmqpHostNameVariable = "SPHERE_RABBITMQ_AMQP_HOST";
+    private const string AmqpPortVariable = "SPHERE_RABBITMQ_AMQP_PORT";
+    private const string AmqpVirtualHostVariable = "SPHERE_RABBITMQ_AMQP_VHOST";
 
     internal static bool TryCreate(out RabbitMqIntegrationTestSettings? settings)
     {
@@ -18,6 +24,9 @@ internal sealed record RabbitMqIntegrationTestSettings(
         var baseUri = Environment.GetEnvironmentVariable(BaseUriVariable);
         var username = Environment.GetEnvironmentVariable(UsernameVariable);
         var password = Environment.GetEnvironmentVariable(PasswordVariable);
+        var amqpHostName = Environment.GetEnvironmentVariable(AmqpHostNameVariable);
+        var amqpVirtualHost = Environment.GetEnvironmentVariable(AmqpVirtualHostVariable);
+        var amqpPortRaw = Environment.GetEnvironmentVariable(AmqpPortVariable);
 
         if (string.IsNullOrWhiteSpace(baseUri) ||
             string.IsNullOrWhiteSpace(username) ||
@@ -27,7 +36,13 @@ internal sealed record RabbitMqIntegrationTestSettings(
             return false;
         }
 
-        settings = new RabbitMqIntegrationTestSettings(new Uri(baseUri, UriKind.Absolute), username, password);
+        settings = new RabbitMqIntegrationTestSettings(
+            new Uri(baseUri, UriKind.Absolute),
+            username,
+            password,
+            string.IsNullOrWhiteSpace(amqpHostName) ? null : amqpHostName,
+            int.TryParse(amqpPortRaw, out var amqpPort) ? amqpPort : DeriveAmqpPort(new Uri(baseUri, UriKind.Absolute)),
+            string.IsNullOrWhiteSpace(amqpVirtualHost) ? "/" : amqpVirtualHost);
         return true;
     }
 
@@ -39,5 +54,21 @@ internal sealed record RabbitMqIntegrationTestSettings(
         }
 
         throw new InvalidOperationException("RabbitMQ integration test settings are not configured.");
+    }
+
+    private static int DeriveAmqpPort(Uri managementUri)
+    {
+        if (managementUri.Port == 15672)
+        {
+            return 5672;
+        }
+
+        var managementPort = managementUri.Port.ToString();
+        if (managementPort.EndsWith("1672", StringComparison.Ordinal) && managementPort.Length > 4)
+        {
+            return int.Parse($"{managementPort[..^4]}5672");
+        }
+
+        return 5672;
     }
 }

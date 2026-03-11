@@ -21,4 +21,7 @@ public sealed record ManagementQueueModel
 
     [JsonPropertyName("arguments")]
     public Dictionary<string, object?> Arguments { get; init; } = new(StringComparer.Ordinal);
+
+    [JsonPropertyName("messages")]
+    public int Messages { get; init; }
 }

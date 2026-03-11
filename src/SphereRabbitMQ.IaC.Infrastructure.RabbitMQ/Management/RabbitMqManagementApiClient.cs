@@ -46,6 +46,19 @@ public sealed class RabbitMqManagementApiClient : IRabbitMqManagementApiClient
         => SendGetAsync<ManagementQueueModel>($"queues/{Encode(virtualHostName)}", cancellationToken);
 
     /// <inheritdoc />
+    public async ValueTask<ManagementQueueModel?> GetQueueAsync(string virtualHostName, string queueName, CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.GetAsync($"queues/{Encode(virtualHostName)}/{Encode(queueName)}", cancellationToken);
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+
+        await EnsureSuccessStatusCodeAsync(response, HttpMethod.Get, $"queues/{Encode(virtualHostName)}/{Encode(queueName)}", cancellationToken);
+        return await response.Content.ReadFromJsonAsync<ManagementQueueModel>(_serializerOptions, cancellationToken);
+    }
+
+    /// <inheritdoc />
     public ValueTask<IReadOnlyList<ManagementBindingModel>> GetBindingsAsync(string virtualHostName, CancellationToken cancellationToken = default)
         => SendGetAsync<ManagementBindingModel>($"bindings/{Encode(virtualHostName)}", cancellationToken);
 
@@ -141,6 +154,58 @@ public sealed class RabbitMqManagementApiClient : IRabbitMqManagementApiClient
         }
 
         await CreateBindingAsync(virtualHostName, binding, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async ValueTask<IReadOnlyList<ManagementRetrievedMessageModel>> GetMessagesAsync(
+        string virtualHostName,
+        string queueName,
+        int count,
+        CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.PostAsJsonAsync(
+            $"queues/{Encode(virtualHostName)}/{Encode(queueName)}/get",
+            new
+            {
+                count,
+                ackmode = "ack_requeue_false",
+                encoding = "auto",
+                truncate = 50_000,
+            },
+            _serializerOptions,
+            cancellationToken);
+        await EnsureSuccessStatusCodeAsync(response, HttpMethod.Post, $"queues/{Encode(virtualHostName)}/{Encode(queueName)}/get", cancellationToken);
+        var payload = await response.Content.ReadFromJsonAsync<List<ManagementRetrievedMessageModel>>(_serializerOptions, cancellationToken);
+        return payload is null ? Array.Empty<ManagementRetrievedMessageModel>() : payload;
+    }
+
+    /// <inheritdoc />
+    public async ValueTask PublishMessageAsync(
+        string virtualHostName,
+        string exchangeName,
+        string routingKey,
+        string? payload,
+        string payloadEncoding,
+        IReadOnlyDictionary<string, object?>? properties,
+        CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.PostAsJsonAsync(
+            $"exchanges/{Encode(virtualHostName)}/{Encode(exchangeName)}/publish",
+            new
+            {
+                routing_key = routingKey,
+                payload = payload ?? string.Empty,
+                payload_encoding = string.IsNullOrWhiteSpace(payloadEncoding) ? "string" : payloadEncoding,
+                properties = properties ?? new Dictionary<string, object?>(StringComparer.Ordinal),
+            },
+            _serializerOptions,
+            cancellationToken);
+        await EnsureSuccessStatusCodeAsync(response, HttpMethod.Post, $"exchanges/{Encode(virtualHostName)}/{Encode(exchangeName)}/publish", cancellationToken);
+        var result = await response.Content.ReadFromJsonAsync<ManagementPublishedMessageResult>(_serializerOptions, cancellationToken);
+        if (result is not { Routed: true })
+        {
+            throw new HttpRequestException($"RabbitMQ Management API publish request was accepted but the message was not routed. Vhost: '{virtualHostName}'. Exchange: '{exchangeName}'. Routing key: '{routingKey}'.");
+        }
     }
 
     private static string BuildBindingEndpoint(string virtualHostName, BindingDefinition binding)

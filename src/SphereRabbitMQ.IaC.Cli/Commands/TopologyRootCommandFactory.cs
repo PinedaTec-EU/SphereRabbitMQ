@@ -40,10 +40,11 @@ internal static class TopologyRootCommandFactory
         """;
     private const string ApplyDescription = """
         Apply a topology plan to RabbitMQ.
-        This command only performs safe reconciliation and refuses destructive plans.
+        This command only performs safe reconciliation and refuses destructive plans unless --migrate is provided.
 
         Example:
           sprmq apply --file samples/minimal-topology.yaml --dry-run
+          sprmq apply --file samples/minimal-topology.yaml --migrate
         """;
     private const string DestroyDescription = """
         Intentionally delete topology resources declared in the YAML file.
@@ -74,6 +75,7 @@ internal static class TopologyRootCommandFactory
         var passwordOption = new Option<string?>("--password", "RabbitMQ password.");
         var virtualHostsOption = new Option<string[]?>("--vhost", "Virtual host filter. Repeat to pass multiple values.");
         var dryRunOption = new Option<bool>("--dry-run", () => false, "Compute and print the apply result without changing the broker.");
+        var migrateOption = new Option<bool>("--migrate", () => false, "Allow supported exchange and queue migrations when immutable broker arguments changed.");
         var verboseOption = new Option<bool>("--verbose", () => false, "Print detailed execution phases and broker operations.");
         var allowDestructiveOption = new Option<bool>("--allow-destructive", () => false, "Allow destructive execution for commands that delete broker resources.");
         var destroyVirtualHostOption = new Option<bool>("--destroy-vhost", () => false, "Delete the full virtual host instead of only the declared resources.");
@@ -139,6 +141,7 @@ internal static class TopologyRootCommandFactory
         applyCommand.AddOption(passwordOption);
         applyCommand.AddOption(virtualHostsOption);
         applyCommand.AddOption(dryRunOption);
+        applyCommand.AddOption(migrateOption);
         applyCommand.AddOption(verboseOption);
         Handler.SetHandler(applyCommand, async (InvocationContext context) =>
         {
@@ -149,6 +152,7 @@ internal static class TopologyRootCommandFactory
                 CreateBrokerOptions(parseResult, managementUrlOption, usernameOption, passwordOption, virtualHostsOption),
                 parseResult.GetValueForOption(outputFormatOption),
                 parseResult.GetValueForOption(dryRunOption),
+                parseResult.GetValueForOption(migrateOption),
                 parseResult.GetValueForOption(verboseOption),
                 cancellationToken);
             context.ExitCode = exitCode;

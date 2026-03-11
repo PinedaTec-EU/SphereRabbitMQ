@@ -54,13 +54,35 @@ Reads desired topology, reads current broker state, and prints the reconciliatio
 
 Builds the execution plan and applies only safe operations.
 
-If the plan contains destructive or unsupported changes, `apply` stops and reports the blocking operations.
+If the plan contains destructive or unsupported changes, `apply` stops and reports the blocking operations unless `--migrate` is provided.
 
 ```bash
 ./cli/sprmq apply --file samples/minimal-topology.yaml
 ./cli/sprmq apply --file samples/minimal-topology.yaml --dry-run
 ./cli/sprmq apply --file samples/minimal-topology.yaml --verbose
+./cli/sprmq apply --file samples/minimal-topology.yaml --migrate
 ```
+
+### `apply --migrate`
+
+`--migrate` enables broker-side reconciliation for resources that RabbitMQ cannot redeclare in place when immutable arguments differ.
+
+Operational rules:
+
+- a per-virtual-host lock queue named `sprmq.migration.lock` is used to serialize migrations across concurrent CLI instances
+- incompatible exchanges are deleted and recreated, then bindings are restored from the YAML definition
+- generated debug queues are deleted and recreated without preserving messages
+- generated retry/dead-letter/parking queues are deleted and recreated without preserving messages
+- mainstream queues use a temporary queue:
+  - create a temporary queue and bind it with the same desired bindings
+  - remove bindings from the old queue
+  - move buffered messages from the old queue into the temporary queue
+  - delete the old queue and create the new one
+  - move messages from the temporary queue into the new queue before restoring bindings
+  - restore bindings from the YAML definition
+  - delete the temporary queue
+
+If `--migrate` is not specified, the CLI keeps the current safe behavior and fails when an incompatible queue or exchange already exists on the broker.
 
 ### `destroy`
 

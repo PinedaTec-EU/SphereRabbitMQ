@@ -1,3 +1,5 @@
+using SphereRabbitMQ.IaC.Application.Apply;
+using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Apply;
 using SphereRabbitMQ.IaC.Domain.Topology;
 
 namespace SphereRabbitMQ.IaC.Tests.Integration;
@@ -263,5 +265,286 @@ public sealed class RabbitMqManagementRoundTripIntegrationTests
             operation.ResourceKind == Domain.Planning.TopologyResourceKind.Exchange &&
             operation.ResourcePath == $"/virtualHosts/{_fixture.VirtualHostName}/exchanges/orders" &&
             operation.Diffs.Any(diff => diff.PropertyName == "type"));
+    }
+
+    [RabbitMqConfiguredFact]
+    public async Task Apply_WithMigrate_RecreatesIncompatibleExchangeAndRestoresBindingsAsync()
+    {
+        await _fixture.ResetVirtualHostAsync();
+
+        var initialTopology = new TopologyDefinition(
+        [
+            new VirtualHostDefinition(
+                _fixture.VirtualHostName,
+                exchanges: [new ExchangeDefinition("orders", ExchangeType.Direct)],
+                queues:
+                [
+                    new QueueDefinition(
+                        "orders.created",
+                        QueueType.Classic,
+                        arguments: new Dictionary<string, object?>(StringComparer.Ordinal)
+                        {
+                            ["x-queue-type"] = "classic",
+                        }),
+                ],
+                bindings: [new BindingDefinition("orders", "orders.created", routingKey: "orders.created")]),
+        ]);
+        var initialPlan = await _fixture.TopologyPlanner.PlanAsync(initialTopology, new TopologyDefinition([]));
+        await _fixture.TopologyApplier.ApplyAsync(initialTopology, initialPlan);
+
+        var desiredTopology = new TopologyDefinition(
+        [
+            new VirtualHostDefinition(
+                _fixture.VirtualHostName,
+                exchanges: [new ExchangeDefinition("orders", ExchangeType.Topic)],
+                queues:
+                [
+                    new QueueDefinition(
+                        "orders.created",
+                        QueueType.Classic,
+                        arguments: new Dictionary<string, object?>(StringComparer.Ordinal)
+                        {
+                            ["x-queue-type"] = "classic",
+                        }),
+                ],
+                bindings: [new BindingDefinition("orders", "orders.created", routingKey: "orders.created")]),
+        ]);
+        var actualTopology = await _fixture.BrokerTopologyReader.ReadAsync();
+        var plan = await _fixture.TopologyPlanner.PlanAsync(desiredTopology, actualTopology);
+
+        await _fixture.TopologyApplier.ApplyAsync(desiredTopology, plan, new TopologyApplyOptions { AllowMigrations = true });
+
+        var actualAfterMigration = await _fixture.BrokerTopologyReader.ReadAsync();
+        var virtualHost = actualAfterMigration.VirtualHosts.Single();
+
+        Assert.Contains(virtualHost.Exchanges, exchange => exchange.Name == "orders" && exchange.Type == ExchangeType.Topic);
+        Assert.Contains(virtualHost.Bindings, binding => binding.SourceExchange == "orders" && binding.Destination == "orders.created" && binding.RoutingKey == "orders.created");
+    }
+
+    [RabbitMqConfiguredFact]
+    public async Task Apply_WithMigrate_RecreatesGeneratedQueueAsync()
+    {
+        await _fixture.ResetVirtualHostAsync();
+
+        var generatedMetadata = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["generated-by"] = "SphereRabbitMQ.IaC",
+            ["source-exchange"] = "orders",
+        };
+
+        var initialTopology = new TopologyDefinition(
+        [
+            new VirtualHostDefinition(
+                _fixture.VirtualHostName,
+                exchanges: [new ExchangeDefinition("orders", ExchangeType.Topic)],
+                queues:
+                [
+                    new QueueDefinition(
+                        "orders.debug",
+                        QueueType.Classic,
+                        arguments: new Dictionary<string, object?>(StringComparer.Ordinal)
+                        {
+                            ["x-queue-type"] = "classic",
+                        },
+                        metadata: generatedMetadata),
+                ],
+                bindings:
+                [
+                    new BindingDefinition("orders", "orders.debug", routingKey: "#", metadata: generatedMetadata),
+                ]),
+        ]);
+        var initialPlan = await _fixture.TopologyPlanner.PlanAsync(initialTopology, new TopologyDefinition([]));
+        await _fixture.TopologyApplier.ApplyAsync(initialTopology, initialPlan);
+
+        var desiredTopology = new TopologyDefinition(
+        [
+            new VirtualHostDefinition(
+                _fixture.VirtualHostName,
+                exchanges: [new ExchangeDefinition("orders", ExchangeType.Topic)],
+                queues:
+                [
+                    new QueueDefinition(
+                        "orders.debug",
+                        QueueType.Quorum,
+                        arguments: new Dictionary<string, object?>(StringComparer.Ordinal)
+                        {
+                            ["x-queue-type"] = "quorum",
+                        },
+                        metadata: generatedMetadata),
+                ],
+                bindings:
+                [
+                    new BindingDefinition("orders", "orders.debug", routingKey: "#", metadata: generatedMetadata),
+                ]),
+        ]);
+        var actualTopology = await _fixture.BrokerTopologyReader.ReadAsync();
+        var plan = await _fixture.TopologyPlanner.PlanAsync(desiredTopology, actualTopology);
+
+        await _fixture.TopologyApplier.ApplyAsync(desiredTopology, plan, new TopologyApplyOptions { AllowMigrations = true });
+
+        var actualAfterMigration = await _fixture.BrokerTopologyReader.ReadAsync();
+        var virtualHost = actualAfterMigration.VirtualHosts.Single();
+
+        Assert.Contains(virtualHost.Queues, queue => queue.Name == "orders.debug" && queue.Type == QueueType.Quorum);
+        Assert.Contains(virtualHost.Bindings, binding => binding.SourceExchange == "orders" && binding.Destination == "orders.debug" && binding.RoutingKey == "#");
+    }
+
+    [RabbitMqConfiguredFact]
+    public async Task Apply_WithMigrate_MainstreamQueueMovesExistingMessagesAsync()
+    {
+        await _fixture.ResetVirtualHostAsync();
+
+        if (!_fixture.SupportsRuntimeQueueMigration)
+        {
+            return;
+        }
+
+        var initialTopology = new TopologyDefinition(
+        [
+            new VirtualHostDefinition(
+                _fixture.VirtualHostName,
+                exchanges: [new ExchangeDefinition("orders", ExchangeType.Topic)],
+                queues:
+                [
+                    new QueueDefinition(
+                        "orders.created",
+                        QueueType.Classic,
+                        arguments: new Dictionary<string, object?>(StringComparer.Ordinal)
+                        {
+                            ["x-queue-type"] = "classic",
+                        }),
+                ],
+                bindings: [new BindingDefinition("orders", "orders.created", routingKey: "orders.created")]),
+        ]);
+        var initialPlan = await _fixture.TopologyPlanner.PlanAsync(initialTopology, new TopologyDefinition([]));
+        await _fixture.TopologyApplier.ApplyAsync(initialTopology, initialPlan);
+
+        await _fixture.ApiClient.PublishMessageAsync(_fixture.VirtualHostName, "orders", "orders.created", "order-1", "string", null);
+        await _fixture.ApiClient.PublishMessageAsync(_fixture.VirtualHostName, "orders", "orders.created", "order-2", "string", null);
+        await _fixture.ApiClient.PublishMessageAsync(_fixture.VirtualHostName, "orders", "orders.created", "order-3", "string", null);
+
+        var desiredTopology = new TopologyDefinition(
+        [
+            new VirtualHostDefinition(
+                _fixture.VirtualHostName,
+                exchanges: [new ExchangeDefinition("orders", ExchangeType.Topic)],
+                queues:
+                [
+                    new QueueDefinition(
+                        "orders.created",
+                        QueueType.Quorum,
+                        arguments: new Dictionary<string, object?>(StringComparer.Ordinal)
+                        {
+                            ["x-queue-type"] = "quorum",
+                        }),
+                ],
+                bindings: [new BindingDefinition("orders", "orders.created", routingKey: "orders.created")]),
+        ]);
+        var actualTopology = await _fixture.BrokerTopologyReader.ReadAsync();
+        var plan = await _fixture.TopologyPlanner.PlanAsync(desiredTopology, actualTopology);
+
+        await _fixture.TopologyApplier.ApplyAsync(desiredTopology, plan, new TopologyApplyOptions { AllowMigrations = true });
+
+        var actualAfterMigration = await _fixture.BrokerTopologyReader.ReadAsync();
+        var virtualHost = actualAfterMigration.VirtualHosts.Single();
+        var movedMessages = await _fixture.ApiClient.GetMessagesAsync(_fixture.VirtualHostName, "orders.created", 10);
+
+        Assert.Contains(virtualHost.Queues, queue => queue.Name == "orders.created" && queue.Type == QueueType.Quorum);
+        Assert.DoesNotContain(virtualHost.Queues, queue => queue.Name == "orders.created.sprmq-migration-temp");
+        Assert.Contains(virtualHost.Bindings, binding => binding.SourceExchange == "orders" && binding.Destination == "orders.created" && binding.RoutingKey == "orders.created");
+        Assert.Collection(
+            movedMessages,
+            message => Assert.Equal("order-1", message.Payload),
+            message => Assert.Equal("order-2", message.Payload),
+            message => Assert.Equal("order-3", message.Payload));
+    }
+
+    [RabbitMqConfiguredFact]
+    public async Task Apply_WithMigrate_UsesLockQueueToSerializeConcurrentMigrationsAsync()
+    {
+        await _fixture.ResetVirtualHostAsync();
+
+        var initialTopology = new TopologyDefinition(
+        [
+            new VirtualHostDefinition(
+                _fixture.VirtualHostName,
+                exchanges: [new ExchangeDefinition("orders", ExchangeType.Topic)],
+                queues:
+                [
+                    new QueueDefinition(
+                        "orders.created",
+                        QueueType.Classic,
+                        arguments: new Dictionary<string, object?>(StringComparer.Ordinal)
+                        {
+                            ["x-queue-type"] = "classic",
+                        }),
+                ],
+                bindings: [new BindingDefinition("orders", "orders.created", routingKey: "orders.created")]),
+        ]);
+        var initialPlan = await _fixture.TopologyPlanner.PlanAsync(initialTopology, new TopologyDefinition([]));
+        await _fixture.TopologyApplier.ApplyAsync(initialTopology, initialPlan);
+
+        var desiredTopology = new TopologyDefinition(
+        [
+            new VirtualHostDefinition(
+                _fixture.VirtualHostName,
+                exchanges: [new ExchangeDefinition("orders", ExchangeType.Topic)],
+                queues:
+                [
+                    new QueueDefinition(
+                        "orders.created",
+                        QueueType.Quorum,
+                        arguments: new Dictionary<string, object?>(StringComparer.Ordinal)
+                        {
+                            ["x-queue-type"] = "quorum",
+                        }),
+                ],
+                bindings: [new BindingDefinition("orders", "orders.created", routingKey: "orders.created")]),
+        ]);
+        var actualTopology = await _fixture.BrokerTopologyReader.ReadAsync();
+        var plan = await _fixture.TopologyPlanner.PlanAsync(desiredTopology, actualTopology);
+        var blockingMover = new BlockingQueueMigrationMessageMover();
+        var applier = new RabbitMqManagementTopologyApplier(_fixture.ApiClient, blockingMover);
+
+        var firstApplyTask = applier.ApplyAsync(desiredTopology, plan, new TopologyApplyOptions { AllowMigrations = true }).AsTask();
+        await blockingMover.WaitUntilFirstMoveStartsAsync();
+
+        var lockQueue = await _fixture.ApiClient.GetQueueAsync(_fixture.VirtualHostName, "sprmq.migration.lock");
+        Assert.NotNull(lockQueue);
+        Assert.Equal(0, lockQueue!.Messages);
+
+        var secondApplyTask = applier.ApplyAsync(desiredTopology, plan, new TopologyApplyOptions { AllowMigrations = true }).AsTask();
+        await Task.Delay(500);
+
+        Assert.False(secondApplyTask.IsCompleted);
+
+        blockingMover.ReleaseFirstMove();
+        await firstApplyTask;
+        await secondApplyTask;
+
+        var actualAfterMigration = await _fixture.BrokerTopologyReader.ReadAsync();
+        Assert.Contains(actualAfterMigration.VirtualHosts.Single().Queues, queue => queue.Name == "orders.created" && queue.Type == QueueType.Quorum);
+    }
+
+    private sealed class BlockingQueueMigrationMessageMover : IQueueMigrationMessageMover
+    {
+        private readonly TaskCompletionSource _firstMoveStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _releaseFirstMove = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _moveCalls;
+
+        public async ValueTask MoveAsync(string sourceQueueName, string destinationQueueName, CancellationToken cancellationToken = default)
+        {
+            if (Interlocked.Increment(ref _moveCalls) == 1)
+            {
+                _firstMoveStarted.TrySetResult();
+                await _releaseFirstMove.Task.WaitAsync(cancellationToken);
+            }
+        }
+
+        public Task WaitUntilFirstMoveStartsAsync()
+            => _firstMoveStarted.Task;
+
+        public void ReleaseFirstMove()
+            => _releaseFirstMove.TrySetResult();
     }
 }

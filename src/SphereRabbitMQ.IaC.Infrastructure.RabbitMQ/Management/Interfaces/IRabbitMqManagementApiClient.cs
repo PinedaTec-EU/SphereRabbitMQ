@@ -24,6 +24,11 @@ public interface IRabbitMqManagementApiClient
     ValueTask<IReadOnlyList<ManagementQueueModel>> GetQueuesAsync(string virtualHostName, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Reads a single queue for the specified virtual host.
+    /// </summary>
+    ValueTask<ManagementQueueModel?> GetQueueAsync(string virtualHostName, string queueName, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Reads bindings for the specified virtual host.
     /// </summary>
     ValueTask<IReadOnlyList<ManagementBindingModel>> GetBindingsAsync(string virtualHostName, CancellationToken cancellationToken = default);
@@ -72,4 +77,25 @@ public interface IRabbitMqManagementApiClient
     /// Recreates a binding after removing existing bindings with the same key.
     /// </summary>
     ValueTask RebindAsync(string virtualHostName, BindingDefinition binding, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Reads and removes a batch of messages from the specified queue.
+    /// </summary>
+    ValueTask<IReadOnlyList<ManagementRetrievedMessageModel>> GetMessagesAsync(
+        string virtualHostName,
+        string queueName,
+        int count,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Publishes a message to an exchange.
+    /// </summary>
+    ValueTask PublishMessageAsync(
+        string virtualHostName,
+        string exchangeName,
+        string routingKey,
+        string? payload,
+        string payloadEncoding,
+        IReadOnlyDictionary<string, object?>? properties,
+        CancellationToken cancellationToken = default);
 }

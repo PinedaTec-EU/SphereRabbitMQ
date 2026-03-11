@@ -1,3 +1,4 @@
+using SphereRabbitMQ.IaC.Application.Apply;
 using SphereRabbitMQ.IaC.Application.Models;
 using SphereRabbitMQ.IaC.Domain.Planning;
 using SphereRabbitMQ.IaC.Domain.Topology;
@@ -28,6 +29,7 @@ public interface ITopologyWorkflowService
     /// </summary>
     ValueTask<(TopologyDefinition Definition, TopologyValidationResult Validation, TopologyPlan Plan)> ApplyAsync(
         Stream stream,
+        TopologyApplyOptions? options = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
