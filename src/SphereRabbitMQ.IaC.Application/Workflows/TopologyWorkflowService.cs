@@ -126,36 +126,6 @@ public sealed class TopologyWorkflowService : ITopologyWorkflowService
         return (definition, validation, plan);
     }
 
-    public async ValueTask<(TopologyDefinition Definition, TopologyValidationResult Validation, TopologyPlan Plan)> PlanDestroyAsync(
-        Stream stream,
-        bool destroyVirtualHosts,
-        CancellationToken cancellationToken = default)
-    {
-        var (definition, validation) = await ValidateAsync(stream, cancellationToken);
-        if (!validation.IsValid)
-        {
-            return (definition, validation, new TopologyPlan(Array.Empty<TopologyPlanOperation>()));
-        }
-
-        var actual = await _brokerTopologyReader.ReadAsync(cancellationToken);
-        var plan = await _topologyDestroyPlanner.PlanAsync(definition, actual, destroyVirtualHosts, cancellationToken);
-        return (definition, validation, plan);
-    }
-
-    public async ValueTask<(TopologyDefinition Definition, TopologyValidationResult Validation, TopologyPlan Plan)> DestroyAsync(
-        Stream stream,
-        bool destroyVirtualHosts,
-        CancellationToken cancellationToken = default)
-    {
-        var (definition, validation, plan) = await PlanDestroyAsync(stream, destroyVirtualHosts, cancellationToken);
-        if (!validation.IsValid)
-        {
-            return (definition, validation, plan);
-        }
-
-        await _topologyApplier.ApplyAsync(definition, plan, cancellationToken);
-        return (definition, validation, plan);
-    }
 
     public ValueTask<TopologyDocument> ExportAsync(CancellationToken cancellationToken = default)
         => _topologyExporter.ExportAsync(cancellationToken);

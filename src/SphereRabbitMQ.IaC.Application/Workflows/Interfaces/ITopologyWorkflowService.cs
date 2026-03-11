@@ -49,22 +49,6 @@ public interface ITopologyWorkflowService
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Parses, normalizes, validates, and plans topology destruction against the broker.
-    /// </summary>
-    ValueTask<(TopologyDefinition Definition, TopologyValidationResult Validation, TopologyPlan Plan)> PlanDestroyAsync(
-        Stream stream,
-        bool destroyVirtualHosts,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Applies a destroy plan to the broker after validation.
-    /// </summary>
-    ValueTask<(TopologyDefinition Definition, TopologyValidationResult Validation, TopologyPlan Plan)> DestroyAsync(
-        Stream stream,
-        bool destroyVirtualHosts,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Exports broker topology to the source-neutral application document model.
     /// </summary>
     ValueTask<TopologyDocument> ExportAsync(CancellationToken cancellationToken = default);
