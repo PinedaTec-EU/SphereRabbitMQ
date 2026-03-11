@@ -22,6 +22,15 @@ public static class YamlTopologyDocumentMapper
                     Password = yamlDocument.Broker.Password,
                     VirtualHosts = yamlDocument.Broker.VirtualHosts.ToArray(),
                 },
+            DebugQueues = yamlDocument.DebugQueues is null
+                ? null
+                : new DebugQueuesDocument
+                {
+                    Enabled = yamlDocument.DebugQueues.Enabled,
+                    QueueSuffix = yamlDocument.DebugQueues.QueueSuffix,
+                    RoutingKey = yamlDocument.DebugQueues.RoutingKey,
+                    Durable = yamlDocument.DebugQueues.Durable,
+                },
             Metadata = new Dictionary<string, string>(yamlDocument.Metadata, StringComparer.Ordinal),
             Naming = yamlDocument.Naming is null
                 ? null
@@ -69,6 +78,7 @@ public static class YamlTopologyDocumentMapper
             Durable = yamlDocument.Durable,
             Exclusive = yamlDocument.Exclusive,
             AutoDelete = yamlDocument.AutoDelete,
+            Ttl = yamlDocument.Ttl,
             Arguments = new Dictionary<string, object?>(yamlDocument.Arguments, StringComparer.Ordinal),
             Metadata = new Dictionary<string, string>(yamlDocument.Metadata, StringComparer.Ordinal),
             DeadLetter = yamlDocument.DeadLetter is null

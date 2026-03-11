@@ -15,6 +15,8 @@ public sealed record QueueDocument
 
     public bool AutoDelete { get; init; }
 
+    public string? Ttl { get; init; }
+
     public IReadOnlyDictionary<string, object?> Arguments { get; init; } =
         new Dictionary<string, object?>(StringComparer.Ordinal);
 

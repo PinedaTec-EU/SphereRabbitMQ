@@ -9,6 +9,8 @@ public sealed record TopologyDocument
 
     public IReadOnlyList<VirtualHostDocument> VirtualHosts { get; init; } = Array.Empty<VirtualHostDocument>();
 
+    public DebugQueuesDocument? DebugQueues { get; init; }
+
     public NamingConventionDocument? Naming { get; init; }
 
     public IReadOnlyDictionary<string, string> Metadata { get; init; } =

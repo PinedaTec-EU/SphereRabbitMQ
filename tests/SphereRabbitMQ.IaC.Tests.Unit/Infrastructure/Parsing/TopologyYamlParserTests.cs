@@ -32,11 +32,18 @@ public sealed class TopologyYamlParserTests
           PASSWORD: guest
           VHOST_NAME: sales
           EXCHANGE_NAME: orders
+        debugQueues:
+          enabled: true
+          queueSuffix: dbg
+          routingKey: "#"
         virtualHosts:
           - name: ${VHOST_NAME}
             exchanges:
               - name: ${EXCHANGE_NAME}
                 type: topic
+            queues:
+              - name: orders.debug.window
+                ttl: "00:05:00"
         """;
 
         await using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(yaml));
@@ -49,6 +56,11 @@ public sealed class TopologyYamlParserTests
         Assert.Equal("guest", topologyDocument.Broker.Username);
         Assert.Equal("guest", topologyDocument.Broker.Password);
         Assert.Equal("sales", topologyDocument.Broker.VirtualHosts.Single());
+        Assert.NotNull(topologyDocument.DebugQueues);
+        Assert.True(topologyDocument.DebugQueues!.Enabled);
+        Assert.Equal("dbg", topologyDocument.DebugQueues.QueueSuffix);
+        Assert.Equal("#", topologyDocument.DebugQueues.RoutingKey);
+        Assert.Equal("00:05:00", topologyDocument.VirtualHosts.Single().Queues.Single().Ttl);
         variableResolverMock.Verify(
             resolver => resolver.Resolve(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string?>>(), true),
             Times.AtLeastOnce);

@@ -20,7 +20,7 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
         var issues = new List<TopologyIssue>();
         var namingPolicy = CreateNamingPolicy(document.Naming);
         var virtualHosts = document.VirtualHosts
-            .Select(vhost => NormalizeVirtualHost(vhost, namingPolicy, issues))
+            .Select(vhost => NormalizeVirtualHost(vhost, document.DebugQueues, namingPolicy, issues))
             .OrderBy(vhost => vhost.Name, StringComparer.Ordinal)
             .ToArray();
 
@@ -37,6 +37,7 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
 
     private static VirtualHostDefinition NormalizeVirtualHost(
         VirtualHostDocument document,
+        DebugQueuesDocument? debugQueues,
         NamingConventionPolicy namingPolicy,
         ICollection<TopologyIssue> issues)
     {
@@ -58,6 +59,12 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
         {
             AppendDerivedArtifacts(queue, namingPolicy, generatedExchanges, generatedQueues, generatedBindings);
         }
+
+        AppendDebugArtifacts(
+            debugQueues,
+            explicitExchanges.Concat(generatedExchanges),
+            generatedQueues,
+            generatedBindings);
 
         return new VirtualHostDefinition(
             document.Name.Trim(),
@@ -101,10 +108,11 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
     {
         var queueType = ParseQueueType(document.Type, $"/virtualHosts/{virtualHostName}/queues/{document.Name}", issues);
         var normalizedArguments = NormalizeObjectDictionary(document.Arguments).ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
+        var ttl = NormalizeQueueTtl(virtualHostName, document.Name, document.Ttl, issues);
         var deadLetter = NormalizeDeadLetter(document.DeadLetter);
         var retry = NormalizeRetry(virtualHostName, document.Name, document.Retry, issues);
 
-        ApplyDerivedQueueArguments(document.Name, normalizedArguments, deadLetter, retry, namingPolicy, issues);
+        ApplyDerivedQueueArguments(document.Name, normalizedArguments, ttl, deadLetter, retry, namingPolicy, issues);
         EnsureQueueTypeArgument(queueType, normalizedArguments);
 
         return new QueueDefinition(
@@ -205,6 +213,25 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
         }
     }
 
+    private static void AppendDebugArtifacts(
+        DebugQueuesDocument? debugQueues,
+        IEnumerable<ExchangeDefinition> exchanges,
+        ICollection<QueueDefinition> queues,
+        ICollection<BindingDefinition> bindings)
+    {
+        if (debugQueues is not { Enabled: true })
+        {
+            return;
+        }
+
+        foreach (var exchange in exchanges.OrderBy(exchange => exchange.Name, StringComparer.Ordinal))
+        {
+            var debugQueueName = $"{exchange.Name}.{debugQueues.QueueSuffix}";
+            queues.Add(CreateGeneratedDebugQueue(debugQueueName, exchange.Name, debugQueues.Durable));
+            bindings.Add(CreateGeneratedDebugBinding(exchange.Name, debugQueueName, debugQueues.RoutingKey));
+        }
+    }
+
     private static ExchangeDefinition CreateGeneratedExchange(string exchangeName, string sourceQueueName)
         => new(
             exchangeName,
@@ -238,6 +265,26 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
             metadata: CreateGeneratedMetadata(sourceQueueName));
     }
 
+    private static QueueDefinition CreateGeneratedDebugQueue(
+        string queueName,
+        string sourceExchangeName,
+        bool durable)
+    {
+        var arguments = new Dictionary<string, object?>(StringComparer.Ordinal);
+        EnsureQueueTypeArgument(QueueType.Classic, arguments);
+
+        return new QueueDefinition(
+            queueName,
+            QueueType.Classic,
+            durable,
+            false,
+            false,
+            arguments,
+            null,
+            null,
+            CreateGeneratedExchangeMetadata(sourceExchangeName));
+    }
+
     private static BindingDefinition CreateGeneratedBinding(
         string sourceExchange,
         string destinationQueue,
@@ -250,6 +297,17 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
             routingKey,
             metadata: CreateGeneratedMetadata(sourceQueueName));
 
+    private static BindingDefinition CreateGeneratedDebugBinding(
+        string sourceExchange,
+        string destinationQueue,
+        string routingKey)
+        => new(
+            sourceExchange,
+            destinationQueue,
+            BindingDestinationType.Queue,
+            routingKey,
+            metadata: CreateGeneratedExchangeMetadata(sourceExchange));
+
     private static IReadOnlyDictionary<string, string> CreateGeneratedMetadata(string sourceQueueName)
         => new Dictionary<string, string>(StringComparer.Ordinal)
         {
@@ -257,14 +315,27 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
             [TopologyNormalizationConsts.SourceQueueMetadataKey] = sourceQueueName,
         };
 
+    private static IReadOnlyDictionary<string, string> CreateGeneratedExchangeMetadata(string sourceExchangeName)
+        => new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [TopologyNormalizationConsts.GeneratedMetadataKey] = TopologyNormalizationConsts.GeneratedMetadataValue,
+            [TopologyNormalizationConsts.SourceExchangeMetadataKey] = sourceExchangeName,
+        };
+
     private static void ApplyDerivedQueueArguments(
         string queueName,
         IDictionary<string, object?> arguments,
+        TimeSpan? ttl,
         DeadLetterDefinition? deadLetter,
         RetryDefinition? retry,
         NamingConventionPolicy namingPolicy,
         ICollection<TopologyIssue> issues)
     {
+        if (ttl is not null)
+        {
+            SetArgument(arguments, TopologyNormalizationConsts.MessageTtlArgument, Convert.ToInt64(ttl.Value.TotalMilliseconds), queueName, issues);
+        }
+
         if (retry is { Enabled: true })
         {
             var retryExchangeName = retry.ExchangeName ?? namingPolicy.GetRetryExchangeName(queueName);
@@ -291,6 +362,31 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
         }
     }
 
+    private static TimeSpan? NormalizeQueueTtl(
+        string virtualHostName,
+        string queueName,
+        string? ttl,
+        ICollection<TopologyIssue> issues)
+    {
+        if (string.IsNullOrWhiteSpace(ttl))
+        {
+            return null;
+        }
+
+        var path = $"/virtualHosts/{virtualHostName}/queues/{queueName}/ttl";
+        if (!TimeSpan.TryParse(ttl, out var parsedTtl) || parsedTtl <= TimeSpan.Zero)
+        {
+            issues.Add(new TopologyIssue(
+                "invalid-queue-ttl",
+                $"Queue ttl '{ttl}' is invalid. Use a positive TimeSpan value.",
+                path,
+                TopologyIssueSeverity.Error));
+            return null;
+        }
+
+        return parsedTtl;
+    }
+
     private static void EnsureQueueTypeArgument(QueueType queueType, IDictionary<string, object?> arguments)
     {
         var queueTypeValue = queueType switch
@@ -306,13 +402,13 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
     private static void SetArgument(
         IDictionary<string, object?> arguments,
         string key,
-        string value,
+        object value,
         string queueName,
         ICollection<TopologyIssue> issues)
     {
         if (arguments.TryGetValue(key, out var existingValue) &&
             existingValue is not null &&
-            !string.Equals(existingValue.ToString(), value, StringComparison.Ordinal))
+            !string.Equals(existingValue.ToString(), value.ToString(), StringComparison.Ordinal))
         {
             issues.Add(new TopologyIssue(
                 "conflicting-derived-argument",
