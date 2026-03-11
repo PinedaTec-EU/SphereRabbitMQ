@@ -100,10 +100,10 @@ jobs:
       - name: Unit tests
         run: |
           dotnet test tests/SphereRabbitMQ.Tests.Unit/SphereRabbitMQ.Tests.Unit.csproj \
-            -c Release --no-build \
+            -c Release --no-restore \
             --logger "console;verbosity=normal"
           dotnet test tests/SphereRabbitMQ.IaC.Tests.Unit/SphereRabbitMQ.IaC.Tests.Unit.csproj \
-            -c Release --no-build \
+            -c Release --no-restore \
             --logger "console;verbosity=normal"
 
       # Pack the all-in-one runtime package.
