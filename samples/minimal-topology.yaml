@@ -21,7 +21,6 @@ virtualHosts:
   - name: sales
     exchanges:
       - name: orders
-        type: topic
         durable: true
     queues:
       - name: orders.created

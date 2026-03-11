@@ -8,8 +8,4 @@ public sealed record DebugQueuesDocument
     public bool Enabled { get; init; }
 
     public string QueueSuffix { get; init; } = "debug";
-
-    public string RoutingKey { get; init; } = "#";
-
-    public bool Durable { get; init; } = true;
 }

@@ -28,8 +28,6 @@ public static class YamlTopologyDocumentMapper
                 {
                     Enabled = yamlDocument.DebugQueues.Enabled,
                     QueueSuffix = yamlDocument.DebugQueues.QueueSuffix,
-                    RoutingKey = yamlDocument.DebugQueues.RoutingKey,
-                    Durable = yamlDocument.DebugQueues.Durable,
                 },
             Metadata = new Dictionary<string, string>(yamlDocument.Metadata, StringComparer.Ordinal),
             Naming = yamlDocument.Naming is null

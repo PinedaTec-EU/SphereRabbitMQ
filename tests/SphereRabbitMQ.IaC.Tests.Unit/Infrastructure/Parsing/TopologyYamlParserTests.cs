@@ -35,12 +35,10 @@ public sealed class TopologyYamlParserTests
         debugQueues:
           enabled: true
           queueSuffix: dbg
-          routingKey: "#"
         virtualHosts:
           - name: ${VHOST_NAME}
             exchanges:
               - name: ${EXCHANGE_NAME}
-                type: topic
             queues:
               - name: orders.debug.window
                 ttl: "00:05:00"
@@ -59,7 +57,7 @@ public sealed class TopologyYamlParserTests
         Assert.NotNull(topologyDocument.DebugQueues);
         Assert.True(topologyDocument.DebugQueues!.Enabled);
         Assert.Equal("dbg", topologyDocument.DebugQueues.QueueSuffix);
-        Assert.Equal("#", topologyDocument.DebugQueues.RoutingKey);
+        Assert.Equal("topic", topologyDocument.VirtualHosts.Single().Exchanges.Single().Type);
         Assert.Equal("00:05:00", topologyDocument.VirtualHosts.Single().Queues.Single().Ttl);
         variableResolverMock.Verify(
             resolver => resolver.Resolve(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string?>>(), true),

@@ -227,8 +227,8 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
         foreach (var exchange in exchanges.OrderBy(exchange => exchange.Name, StringComparer.Ordinal))
         {
             var debugQueueName = $"{exchange.Name}.{debugQueues.QueueSuffix}";
-            queues.Add(CreateGeneratedDebugQueue(debugQueueName, exchange.Name, debugQueues.Durable));
-            bindings.Add(CreateGeneratedDebugBinding(exchange.Name, debugQueueName, debugQueues.RoutingKey));
+            queues.Add(CreateGeneratedDebugQueue(debugQueueName, exchange.Name));
+            bindings.Add(CreateGeneratedDebugBinding(exchange.Name, debugQueueName));
         }
     }
 
@@ -267,8 +267,7 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
 
     private static QueueDefinition CreateGeneratedDebugQueue(
         string queueName,
-        string sourceExchangeName,
-        bool durable)
+        string sourceExchangeName)
     {
         var arguments = new Dictionary<string, object?>(StringComparer.Ordinal);
         EnsureQueueTypeArgument(QueueType.Classic, arguments);
@@ -276,7 +275,7 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
         return new QueueDefinition(
             queueName,
             QueueType.Classic,
-            durable,
+            true,
             false,
             false,
             arguments,
@@ -299,13 +298,12 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
 
     private static BindingDefinition CreateGeneratedDebugBinding(
         string sourceExchange,
-        string destinationQueue,
-        string routingKey)
+        string destinationQueue)
         => new(
             sourceExchange,
             destinationQueue,
             BindingDestinationType.Queue,
-            routingKey,
+            TopologyNormalizationConsts.DebugQueueRoutingKey,
             metadata: CreateGeneratedExchangeMetadata(sourceExchange));
 
     private static IReadOnlyDictionary<string, string> CreateGeneratedMetadata(string sourceQueueName)
