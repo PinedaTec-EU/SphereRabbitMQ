@@ -5,6 +5,8 @@ using SphereRabbitMQ.IaC.Application.Parsing.Interfaces;
 using SphereRabbitMQ.IaC.Application.Validation.Interfaces;
 using SphereRabbitMQ.IaC.Cli.Commands.Interfaces;
 using SphereRabbitMQ.IaC.Cli.Commands.Models;
+using SphereRabbitMQ.IaC.Domain.Planning;
+using SphereRabbitMQ.IaC.Domain.Topology;
 using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Configuration;
 using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Runtime.Interfaces;
 using System.Reflection;
@@ -97,6 +99,14 @@ internal sealed class TopologyCommandHandler
             var topologyDocument = await ParseTopologyDocumentAsync(stream, cancellationToken);
             WriteVerbose(outputFormat, verbose, "Phase: resolve broker settings.");
             var broker = ResolveBrokerOptions(brokerOptionsInput, topologyDocument.Broker, topologyDocument.VirtualHosts);
+            var brokerValidation = ValidateBrokerVirtualHostAlignment(broker, topologyDocument.VirtualHosts);
+            if (!brokerValidation.IsValid)
+            {
+                var invalidBrokerResult = new PlanCommandResult(broker, brokerValidation, CreateEmptyPlan());
+                Write(outputFormat, invalidBrokerResult, CommandOutputRenderer.RenderPlan(invalidBrokerResult));
+                return CommandExitCodes.ValidationFailed;
+            }
+
             WriteConnection(outputFormat, broker);
             WriteVerbose(outputFormat, verbose, "Phase: read broker topology and build reconciliation plan.");
             stream.Position = 0;
@@ -147,6 +157,14 @@ internal sealed class TopologyCommandHandler
             var topologyDocument = await ParseTopologyDocumentAsync(stream, cancellationToken);
             WriteVerbose(outputFormat, verbose, "Phase: resolve broker settings.");
             var broker = ResolveBrokerOptions(brokerOptionsInput, topologyDocument.Broker, topologyDocument.VirtualHosts);
+            var brokerValidation = ValidateBrokerVirtualHostAlignment(broker, topologyDocument.VirtualHosts);
+            if (!brokerValidation.IsValid)
+            {
+                var invalidBrokerResult = new ApplyCommandResult(dryRun, broker, brokerValidation, CreateEmptyPlan());
+                Write(outputFormat, invalidBrokerResult, CommandOutputRenderer.RenderApply(invalidBrokerResult));
+                return CommandExitCodes.ValidationFailed;
+            }
+
             WriteConnection(outputFormat, broker);
             WriteVerbose(outputFormat, verbose, dryRun
                 ? "Phase: read broker topology and build dry-run apply plan."
@@ -274,6 +292,14 @@ internal sealed class TopologyCommandHandler
             var topologyDocument = await ParseTopologyDocumentAsync(stream, cancellationToken);
             WriteVerbose(outputFormat, verbose, "Phase: resolve broker settings.");
             var broker = ResolveBrokerOptions(brokerOptionsInput, topologyDocument.Broker, topologyDocument.VirtualHosts);
+            var brokerValidation = ValidateBrokerVirtualHostAlignment(broker, topologyDocument.VirtualHosts);
+            if (!brokerValidation.IsValid)
+            {
+                var invalidBrokerResult = new DestroyCommandResult(dryRun, destroyVirtualHost, broker, brokerValidation, CreateEmptyPlan());
+                Write(outputFormat, invalidBrokerResult, CommandOutputRenderer.RenderDestroy(invalidBrokerResult));
+                return CommandExitCodes.ValidationFailed;
+            }
+
             WriteConnection(outputFormat, broker);
             WriteVerbose(outputFormat, verbose, dryRun
                 ? "Phase: read broker topology and build dry-run destroy plan."
@@ -470,6 +496,36 @@ internal sealed class TopologyCommandHandler
             new BrokerOptionValue<string>(DefaultUsername, BrokerOptionSource.Default),
             BrokerOptionSource.Default,
             new BrokerOptionValue<IReadOnlyList<string>>(Array.Empty<string>(), BrokerOptionSource.Default));
+
+    private static TopologyPlan CreateEmptyPlan()
+        => new(Array.Empty<TopologyPlanOperation>());
+
+    private static TopologyValidationResult ValidateBrokerVirtualHostAlignment(
+        BrokerResolutionResult broker,
+        IReadOnlyList<Application.Models.VirtualHostDocument> topologyVirtualHosts)
+    {
+        var declaredVirtualHosts = topologyVirtualHosts
+            .Select(virtualHost => virtualHost.Name)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToArray();
+        var resolvedVirtualHosts = broker.VirtualHosts.Value
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToArray();
+
+        if (resolvedVirtualHosts.Length == 0 || declaredVirtualHosts.SequenceEqual(resolvedVirtualHosts, StringComparer.Ordinal))
+        {
+            return TopologyValidationResult.Success;
+        }
+
+        return new TopologyValidationResult(
+        [
+            new TopologyIssue(
+                "broker-virtual-host-mismatch",
+                $"Broker virtualHosts [{string.Join(", ", resolvedVirtualHosts)}] do not match declared topology virtualHosts [{string.Join(", ", declaredVirtualHosts)}]. Align both sections or omit broker.virtualHosts to derive them from the topology.",
+                "/broker/virtualHosts",
+                TopologyIssueSeverity.Error),
+        ]);
+    }
 
     private static string GetToolVersion()
         => Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.0.0.0";
