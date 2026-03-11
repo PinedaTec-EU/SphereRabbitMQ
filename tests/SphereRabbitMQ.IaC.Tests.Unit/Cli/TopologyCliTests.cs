@@ -16,6 +16,8 @@ using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Configuration;
 using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Management.Interfaces;
 using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Runtime;
 using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Runtime.Interfaces;
+using SphereRabbitMQ.IaC.Infrastructure.Yaml.Parsing;
+using SphereRabbitMQ.IaC.Application.Variables;
 
 namespace SphereRabbitMQ.IaC.Tests.Unit.Cli;
 
@@ -294,6 +296,62 @@ public sealed class TopologyCliTests
             runtimeFactoryMock.Verify(factory => factory.Create(It.IsAny<RabbitMqManagementOptions>()), Times.Never);
             commandOutputWriterMock.Verify(
                 writer => writer.WriteText(It.Is<string>(value => value.Contains("broker-virtual-host-mismatch", StringComparison.Ordinal) || value.Contains("do not match declared topology virtualHosts", StringComparison.Ordinal))),
+                Times.AtLeastOnce);
+        }
+        finally
+        {
+            File.Delete(filePath);
+        }
+    }
+
+    [Fact]
+    public async Task ApplyAsync_ReturnsValidationFailed_WhenYamlBrokerVirtualHostDiffersFromDeclaredVirtualHost()
+    {
+        var filePath = Path.GetTempFileName();
+
+        try
+        {
+            await File.WriteAllTextAsync(
+                filePath,
+                """
+                broker:
+                  managementUrl: http://localhost:15672/api/
+                  username: guest
+                  password: guest
+                  virtualHosts:
+                    - sales-v2
+                virtualHosts:
+                  - name: sales
+                """);
+
+            ITopologyParser topologyParser = new TopologyYamlParser(new EnvironmentVariableResolver());
+            var topologyNormalizerMock = new Mock<ITopologyNormalizer>(MockBehavior.Strict);
+            var topologyValidatorMock = new Mock<ITopologyValidator>(MockBehavior.Strict);
+            var runtimeFactoryMock = new Mock<IRabbitMqRuntimeServiceFactory>(MockBehavior.Strict);
+            var topologyDocumentWriterMock = new Mock<ITopologyDocumentWriter>(MockBehavior.Strict);
+            var commandOutputWriterMock = new Mock<ICommandOutputWriter>(MockBehavior.Strict);
+            commandOutputWriterMock.Setup(writer => writer.WriteText(It.IsAny<string>()));
+
+            var handler = new TopologyCommandHandler(
+                topologyParser,
+                topologyNormalizerMock.Object,
+                topologyValidatorMock.Object,
+                runtimeFactoryMock.Object,
+                topologyDocumentWriterMock.Object,
+                commandOutputWriterMock.Object);
+
+            var exitCode = await handler.ApplyAsync(
+                filePath,
+                new BrokerOptionsInput(null, null, null, null),
+                TopologyOutputFormat.Text,
+                false,
+                false,
+                CancellationToken.None);
+
+            Assert.Equal(CommandExitCodes.ValidationFailed, exitCode);
+            runtimeFactoryMock.Verify(factory => factory.Create(It.IsAny<RabbitMqManagementOptions>()), Times.Never);
+            commandOutputWriterMock.Verify(
+                writer => writer.WriteText(It.Is<string>(value => value.Contains("do not match declared topology virtualHosts", StringComparison.Ordinal))),
                 Times.AtLeastOnce);
         }
         finally
