@@ -1,5 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace SphereRabbitMQ.Domain.Consumers;
 
+[ExcludeFromCodeCoverage]
 public sealed class NonRetriableMessageException : Exception
 {
     public NonRetriableMessageException(string message)
