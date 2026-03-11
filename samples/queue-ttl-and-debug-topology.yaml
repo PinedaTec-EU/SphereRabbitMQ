@@ -3,7 +3,7 @@ broker:
   username: admin
   password: qwerty12345
   virtualHosts:
-    - sales
+    - sales-v2
 
 debugQueues:
   enabled: true
@@ -14,7 +14,7 @@ metadata:
   service: ordering
 
 virtualHosts:
-  - name: sales
+  - name: sales-v2
     exchanges:
       - name: orders
         durable: true
