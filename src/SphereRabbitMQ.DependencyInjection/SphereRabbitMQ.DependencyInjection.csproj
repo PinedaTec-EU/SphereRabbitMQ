@@ -11,6 +11,7 @@
     <Title>SphereRabbitMQ</Title>
     <Description>All-in-one runtime messaging library for RabbitMQ on top of externally managed topology.</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>
 
   <ItemGroup>
@@ -29,6 +30,7 @@
 
   <ItemGroup>
     <None Include="..\..\README.md" Pack="true" PackagePath="\" Link="README.md" />
+    <None Include="..\..\LICENSE.txt" Pack="true" PackagePath="\" Link="LICENSE.txt" />
   </ItemGroup>
 
   <PropertyGroup>
