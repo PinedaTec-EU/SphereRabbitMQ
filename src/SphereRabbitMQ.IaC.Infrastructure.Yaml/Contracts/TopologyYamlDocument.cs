@@ -1,8 +1,11 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace SphereRabbitMQ.IaC.Infrastructure.Yaml.Contracts;
 
 /// <summary>
 /// YAML contract root for topology definitions.
 /// </summary>
+[ExcludeFromCodeCoverage]
 public sealed record TopologyYamlDocument
 {
     public BrokerYamlDocument? Broker { get; init; }

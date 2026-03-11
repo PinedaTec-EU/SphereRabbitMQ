@@ -1,8 +1,11 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace SphereRabbitMQ.IaC.Application.Models;
 
 /// <summary>
 /// Source-neutral topology document used between parsing and normalization.
 /// </summary>
+[ExcludeFromCodeCoverage]
 public sealed record TopologyDocument
 {
     public BrokerDocument? Broker { get; init; }

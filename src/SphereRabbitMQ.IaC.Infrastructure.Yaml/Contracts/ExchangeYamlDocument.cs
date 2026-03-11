@@ -1,8 +1,11 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace SphereRabbitMQ.IaC.Infrastructure.Yaml.Contracts;
 
 /// <summary>
 /// YAML contract for an exchange definition.
 /// </summary>
+[ExcludeFromCodeCoverage]
 public sealed record ExchangeYamlDocument
 {
     public required string Name { get; init; }

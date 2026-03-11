@@ -1,8 +1,11 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace SphereRabbitMQ.IaC.Application.Models;
 
 /// <summary>
 /// Source-neutral exchange document.
 /// </summary>
+[ExcludeFromCodeCoverage]
 public sealed record ExchangeDocument
 {
     public required string Name { get; init; }

@@ -1,8 +1,11 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace SphereRabbitMQ.IaC.Infrastructure.Yaml.Contracts;
 
 /// <summary>
 /// YAML contract for retry configuration.
 /// </summary>
+[ExcludeFromCodeCoverage]
 public sealed record RetryYamlDocument
 {
     public bool Enabled { get; init; } = true;

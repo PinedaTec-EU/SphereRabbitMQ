@@ -1,8 +1,11 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace SphereRabbitMQ.IaC.Application.Models;
 
 /// <summary>
 /// Source-neutral retry document.
 /// </summary>
+[ExcludeFromCodeCoverage]
 public sealed record RetryDocument
 {
     public bool Enabled { get; init; } = true;

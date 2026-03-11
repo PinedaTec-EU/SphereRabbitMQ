@@ -1,8 +1,11 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace SphereRabbitMQ.IaC.Application.Models;
 
 /// <summary>
 /// Source-neutral broker connection settings used by automation adapters.
 /// </summary>
+[ExcludeFromCodeCoverage]
 public sealed record BrokerDocument
 {
     public string? ManagementUrl { get; init; }

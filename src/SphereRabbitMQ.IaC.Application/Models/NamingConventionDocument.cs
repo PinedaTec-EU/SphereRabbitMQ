@@ -1,8 +1,11 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace SphereRabbitMQ.IaC.Application.Models;
 
 /// <summary>
 /// Source-neutral naming policy document.
 /// </summary>
+[ExcludeFromCodeCoverage]
 public sealed record NamingConventionDocument
 {
     public string? Separator { get; init; }

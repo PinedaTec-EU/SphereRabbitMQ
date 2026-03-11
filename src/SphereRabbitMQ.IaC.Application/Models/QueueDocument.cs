@@ -1,8 +1,11 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace SphereRabbitMQ.IaC.Application.Models;
 
 /// <summary>
 /// Source-neutral queue document.
 /// </summary>
+[ExcludeFromCodeCoverage]
 public sealed record QueueDocument
 {
     public required string Name { get; init; }

@@ -1,8 +1,11 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace SphereRabbitMQ.IaC.Infrastructure.Yaml.Contracts;
 
 /// <summary>
 /// YAML contract for a queue definition.
 /// </summary>
+[ExcludeFromCodeCoverage]
 public sealed record QueueYamlDocument
 {
     public required string Name { get; init; }

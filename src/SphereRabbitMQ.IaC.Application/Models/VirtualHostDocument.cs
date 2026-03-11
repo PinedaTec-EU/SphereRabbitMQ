@@ -1,8 +1,11 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace SphereRabbitMQ.IaC.Application.Models;
 
 /// <summary>
 /// Source-neutral virtual host document.
 /// </summary>
+[ExcludeFromCodeCoverage]
 public sealed record VirtualHostDocument
 {
     public required string Name { get; init; }

@@ -1,8 +1,11 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace SphereRabbitMQ.IaC.Application.Models;
 
 /// <summary>
 /// Source-neutral binding document.
 /// </summary>
+[ExcludeFromCodeCoverage]
 public sealed record BindingDocument
 {
     public required string SourceExchange { get; init; }

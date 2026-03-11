@@ -1,8 +1,11 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace SphereRabbitMQ.IaC.Application.Models;
 
 /// <summary>
 /// Source-neutral retry step document.
 /// </summary>
+[ExcludeFromCodeCoverage]
 public sealed record RetryStepDocument
 {
     public required string Delay { get; init; }
