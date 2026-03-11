@@ -32,15 +32,8 @@ echo "Creando tag: $TAG"
 
 # Verifica si el tag ya existe
 if git rev-parse "$TAG" >/dev/null 2>&1; then
-	echo "Tag $TAG ya existe. Incrementando versión..."
-	MAJOR=$(echo "$VERSION" | cut -d'.' -f1)
-	MINOR=$(echo "$VERSION" | cut -d'.' -f2)
-	if [ -z "$MAJOR" ]; then MAJOR=0; fi
-	if [ -z "$MINOR" ]; then MINOR=0; fi
-	MINOR=$((10#$MINOR + 1))
-	VERSION="$MAJOR.$(printf '%02d' "$MINOR")"
-	TAG="deploy/${ENVIRONMENT}/${VERSION}"
-	echo "Nueva versión: $VERSION"
+	echo "Error: el tag $TAG ya existe. Actualiza version.nfo antes de volver a ejecutar."
+	exit 1
 fi
 
 # Actualiza version.nfo con la nueva versión
