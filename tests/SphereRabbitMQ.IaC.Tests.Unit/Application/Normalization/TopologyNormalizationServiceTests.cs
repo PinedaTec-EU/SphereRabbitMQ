@@ -56,6 +56,10 @@ public sealed class TopologyNormalizationServiceTests
         Assert.Contains(topologyDefinition.VirtualHosts[1].Queues, queue => queue.Name == "audit.debug");
         Assert.Contains(topologyDefinition.VirtualHosts[1].Queues, queue => queue.Name == "events.debug");
         Assert.Contains(topologyDefinition.VirtualHosts[1].Bindings, binding => binding.Destination == "events.debug" && binding.RoutingKey == "#");
+        Assert.Equal(
+            ExchangeType.Topic,
+            topologyDefinition.VirtualHosts[1].Exchanges.Single(exchange => exchange.Name == "events").Type);
+        Assert.True(topologyDefinition.VirtualHosts[1].Queues.Single(queue => queue.Name == "events.debug").Durable);
         Assert.Contains(topologyDefinition.VirtualHosts[1].Queues, queue => queue.Name == "orders.retry.fast");
         Assert.Contains(topologyDefinition.VirtualHosts[1].Queues, queue => queue.Name == "orders.retry.slow");
         Assert.Equal(QueueType.Quorum, topologyDefinition.VirtualHosts[1].Queues.Single(queue => queue.Name == "orders").Type);

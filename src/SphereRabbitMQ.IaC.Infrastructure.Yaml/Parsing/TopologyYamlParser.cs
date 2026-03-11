@@ -111,7 +111,6 @@ public sealed class TopologyYamlParser : ITopologyParser
             : document with
             {
                 QueueSuffix = Resolve(document.QueueSuffix, variables),
-                RoutingKey = Resolve(document.RoutingKey, variables),
             };
 
     private BindingYamlDocument ResolveBinding(
