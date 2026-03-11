@@ -1,5 +1,10 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/SphereRabbitMQ.Abstractions/SphereRabbitMQ.Abstractions.csproj" />
+    <Project Path="src/SphereRabbitMQ.Application/SphereRabbitMQ.Application.csproj" />
+    <Project Path="src/SphereRabbitMQ.DependencyInjection/SphereRabbitMQ.DependencyInjection.csproj" />
+    <Project Path="src/SphereRabbitMQ.Domain/SphereRabbitMQ.Domain.csproj" />
+    <Project Path="src/SphereRabbitMQ.Infrastructure.RabbitMQ/SphereRabbitMQ.Infrastructure.RabbitMQ.csproj" />
     <Project Path="src/SphereRabbitMQ.IaC.Application/SphereRabbitMQ.IaC.Application.csproj" />
     <Project Path="src/SphereRabbitMQ.IaC.Cli/SphereRabbitMQ.IaC.Cli.csproj" />
     <Project Path="src/SphereRabbitMQ.IaC.Domain/SphereRabbitMQ.IaC.Domain.csproj" />
@@ -7,6 +12,8 @@
     <Project Path="src/SphereRabbitMQ.IaC.Infrastructure.Yaml/SphereRabbitMQ.IaC.Infrastructure.Yaml.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/SphereRabbitMQ.Tests.Integration/SphereRabbitMQ.Tests.Integration.csproj" />
+    <Project Path="tests/SphereRabbitMQ.Tests.Unit/SphereRabbitMQ.Tests.Unit.csproj" />
     <Project Path="tests/SphereRabbitMQ.IaC.Tests.Integration/SphereRabbitMQ.IaC.Tests.Integration.csproj" />
     <Project Path="tests/SphereRabbitMQ.IaC.Tests.Unit/SphereRabbitMQ.IaC.Tests.Unit.csproj" />
   </Folder>

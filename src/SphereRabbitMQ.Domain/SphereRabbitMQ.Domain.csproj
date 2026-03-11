@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>SphereRabbitMQ.Domain</AssemblyName>
+    <ReleaseVersion>0.1.1.25</ReleaseVersion>
+    <AssemblyVersion>$(ReleaseVersion)</AssemblyVersion>
+    <FileVersion>$(ReleaseVersion)</FileVersion>
+    <Version>$(ReleaseVersion)</Version>
+    <RootNamespace>SphereRabbitMQ.Domain</RootNamespace>
+    <Description>Domain models for the SphereRabbitMQ runtime messaging library.</Description>
+  </PropertyGroup>
+</Project>

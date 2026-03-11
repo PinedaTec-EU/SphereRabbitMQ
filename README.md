@@ -2,6 +2,8 @@
 
 `SphereRabbitMQ.IaC` is a .NET 10 infrastructure-as-code toolchain for RabbitMQ topology management. It is intentionally scoped to broker infrastructure only: virtual hosts, exchanges, queues, bindings, dead-letter topology, and broker-based retry topology.
 
+The repository now also includes the runtime library `SphereRabbitMQ`, which publishes and consumes on top of pre-provisioned RabbitMQ topology without declaring infrastructure at runtime. Runtime usage is documented in [docs/runtime-library.md](/Users/jmr.pineda/Projects/GitHub/PinedaTec.eu/SphereRabbitMQ/docs/runtime-library.md).
+
 CLI usage, conventions, and topology generation rules are documented in [docs/cli.md](/Users/jmr.pineda/Projects/GitHub/PinedaTec.eu/SphereRabbitMQ/docs/cli.md).
 
 ## Phase 1 status

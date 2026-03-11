@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>SphereRabbitMQ.Tests.Unit</AssemblyName>
+    <RootNamespace>SphereRabbitMQ.Tests.Unit</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="Moq" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\SphereRabbitMQ.Abstractions\SphereRabbitMQ.Abstractions.csproj" />
+    <ProjectReference Include="..\..\src\SphereRabbitMQ.Application\SphereRabbitMQ.Application.csproj" />
+    <ProjectReference Include="..\..\src\SphereRabbitMQ.DependencyInjection\SphereRabbitMQ.DependencyInjection.csproj" />
+    <ProjectReference Include="..\..\src\SphereRabbitMQ.Domain\SphereRabbitMQ.Domain.csproj" />
+    <ProjectReference Include="..\..\src\SphereRabbitMQ.Infrastructure.RabbitMQ\SphereRabbitMQ.Infrastructure.RabbitMQ.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+</Project>
