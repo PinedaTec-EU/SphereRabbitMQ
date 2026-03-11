@@ -8,6 +8,7 @@
     <Version>$(ReleaseVersion)</Version>
     <RootNamespace>SphereRabbitMQ.Abstractions</RootNamespace>
     <Description>Public contracts for the SphereRabbitMQ runtime messaging library.</Description>
+    <IsPackable>false</IsPackable>
   </PropertyGroup>
 
   <ItemGroup>

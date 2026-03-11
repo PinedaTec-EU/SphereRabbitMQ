@@ -106,25 +106,16 @@ jobs:
             -c Release --no-build \
             --logger "console;verbosity=normal"
 
-      # Pack the 5 runtime library projects in dependency order.
-      # IaC projects and test projects are intentionally excluded.
+      # Pack the all-in-one runtime package.
+      # Internal runtime projects are included in the package output through the main project.
       - name: Pack
         run: |
           VERSION=${{ steps.version.outputs.VERSION }}
-          PROJECTS=(
-            src/SphereRabbitMQ.Domain/SphereRabbitMQ.Domain.csproj
-            src/SphereRabbitMQ.Abstractions/SphereRabbitMQ.Abstractions.csproj
-            src/SphereRabbitMQ.Application/SphereRabbitMQ.Application.csproj
-            src/SphereRabbitMQ.Infrastructure.RabbitMQ/SphereRabbitMQ.Infrastructure.RabbitMQ.csproj
-            src/SphereRabbitMQ.DependencyInjection/SphereRabbitMQ.DependencyInjection.csproj
-          )
-          for project in "${PROJECTS[@]}"; do
-            dotnet pack "$project" \
-              -c Release \
-              --no-build \
-              -p:Version=$VERSION \
-              --output nupkgs
-          done
+          dotnet pack src/SphereRabbitMQ.DependencyInjection/SphereRabbitMQ.DependencyInjection.csproj \
+            -c Release \
+            --no-build \
+            -p:Version=$VERSION \
+            --output nupkgs
 
       - name: List packages
         run: ls -lh nupkgs/

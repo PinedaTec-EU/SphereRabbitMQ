@@ -8,5 +8,6 @@
     <Version>$(ReleaseVersion)</Version>
     <RootNamespace>SphereRabbitMQ.Domain</RootNamespace>
     <Description>Domain models for the SphereRabbitMQ runtime messaging library.</Description>
+    <IsPackable>false</IsPackable>
   </PropertyGroup>
 </Project>

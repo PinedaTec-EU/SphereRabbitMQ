@@ -7,7 +7,10 @@
     <FileVersion>$(ReleaseVersion)</FileVersion>
     <Version>$(ReleaseVersion)</Version>
     <RootNamespace>SphereRabbitMQ.DependencyInjection</RootNamespace>
-    <Description>Dependency injection helpers for the SphereRabbitMQ runtime messaging library.</Description>
+    <PackageId>SphereRabbitMQ</PackageId>
+    <Title>SphereRabbitMQ</Title>
+    <Description>All-in-one runtime messaging library for RabbitMQ on top of externally managed topology.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
@@ -23,4 +26,19 @@
     <ProjectReference Include="..\SphereRabbitMQ.Domain\SphereRabbitMQ.Domain.csproj" />
     <ProjectReference Include="..\SphereRabbitMQ.Infrastructure.RabbitMQ\SphereRabbitMQ.Infrastructure.RabbitMQ.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" Link="README.md" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);IncludeProjectReferenceOutputsInPackage</TargetsForTfmSpecificBuildOutput>
+    <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.xml</AllowedOutputExtensionsInPackageBuildOutputFolder>
+  </PropertyGroup>
+
+  <Target Name="IncludeProjectReferenceOutputsInPackage" DependsOnTargets="ResolveReferences">
+    <ItemGroup>
+      <BuildOutputInPackage Include="@(ReferenceCopyLocalPaths->WithMetadataValue('ReferenceSourceTarget', 'ProjectReference'))" />
+    </ItemGroup>
+  </Target>
 </Project>
