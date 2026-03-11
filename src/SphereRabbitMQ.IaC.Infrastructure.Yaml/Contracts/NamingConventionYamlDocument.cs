@@ -1,8 +1,11 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace SphereRabbitMQ.IaC.Infrastructure.Yaml.Contracts;
 
 /// <summary>
 /// YAML contract for naming policy overrides.
 /// </summary>
+[ExcludeFromCodeCoverage]
 public sealed record NamingConventionYamlDocument
 {
     public string? Separator { get; init; }
