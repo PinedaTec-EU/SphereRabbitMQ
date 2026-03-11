@@ -1,7 +1,7 @@
 name: Publish NuGet
 
-# Triggered when a tag matching v<major>.<minor>.<patch>[.<revision>] is pushed.
-# Examples: v1.0.0  v0.1.1.34
+# Triggered when a tag matching deploy/global/<major>.<minor>.<patch>[.<revision>] is pushed.
+# Examples: deploy/global/1.0.0  deploy/global/0.1.1.34
 on:
   push:
     tags:
@@ -64,12 +64,25 @@ jobs:
             echo "dotnet executable not found at ${DOTNET_INSTALL_DIR}/dotnet"
           fi
 
-      # Strip the leading 'v' from the tag to get the NuGet package version.
-      # Tag v0.1.1.34  →  VERSION=0.1.1.34
+      # Extract the version from tags shaped as deploy/global/<version>.
+      # Tag deploy/global/0.1.1.34  →  VERSION=0.1.1.34
       - name: Extract version from tag
+        shell: bash
         id: version
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          set -euo pipefail
+          PREFIX="deploy/global/"
+          if [[ "${GITHUB_REF_NAME}" != ${PREFIX}* ]]; then
+            echo "Unexpected tag format: ${GITHUB_REF_NAME}" >&2
+            exit 1
+          fi
+
+          VERSION="${GITHUB_REF_NAME#${PREFIX}}"
+          if [[ -z "${VERSION}" ]]; then
+            echo "Unable to extract version from tag: ${GITHUB_REF_NAME}" >&2
+            exit 1
+          fi
+
           echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Publishing version: $VERSION"
 
