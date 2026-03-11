@@ -14,6 +14,22 @@ Its scope is intentionally limited to RabbitMQ infrastructure:
 
 It does not provide runtime publisher/subscriber abstractions.
 
+## Critical Scope Boundary
+
+`sprmq` is the owner of RabbitMQ topology in this repository.
+
+The runtime library does not create:
+
+- virtual hosts
+- exchanges
+- queues
+- bindings
+
+That means:
+
+- if the YAML does not define retry or dead-letter topology, the runtime will fail when configured to use it
+- if a queue or exchange is missing on the broker, runtime code fails explicitly instead of creating it
+
 ## Build And Run
 
 Publish the standalone CLI through the VS Code task `publish sprmq cli`.
@@ -83,6 +99,22 @@ Operational rules:
   - delete the temporary queue
 
 If `--migrate` is not specified, the CLI keeps the current safe behavior and fails when an incompatible queue or exchange already exists on the broker.
+
+Operational consequences:
+
+- `--migrate` is destructive by design for incompatible resources
+- generated queues do not preserve messages
+- mainstream queue migration tries to preserve buffered messages and binding order, but it is still an operational migration and should be scheduled carefully
+- concurrent `--migrate` executions on the same virtual host are serialized through `sprmq.migration.lock`
+
+Example:
+
+```bash
+./cli/sprmq apply \
+  --file samples/queue-ttl-and-debug-topology.yaml \
+  --migrate \
+  --verbose
+```
 
 ### `destroy`
 
@@ -260,6 +292,12 @@ Operationally:
 - when TTL expires, the message is dead-lettered back to the main flow
 - dead-letter artifacts remain separate and visible in the plan
 
+Important restriction:
+
+- `sprmq` can generate this topology from YAML
+- the runtime expects it to already exist
+- the runtime will not synthesize any missing retry or dead-letter resources on startup or on first failure
+
 ## Samples
 
 Repository samples:
@@ -285,3 +323,11 @@ The CLI is designed for CI/CD execution:
 - no hidden destructive reconciliation during `apply`
 
 If the tool detects a destructive or unsupported change, it prints the blocking operations and exits with a non-success code.
+
+## Recommended Operator Rules
+
+- use `plan` in CI before `apply`
+- use `apply` without `--migrate` by default
+- use `apply --migrate` only for reviewed incompatible changes
+- treat generated queue recreation as message-destructive
+- validate runtime consumers against the exact retry and dead-letter topology declared in YAML
