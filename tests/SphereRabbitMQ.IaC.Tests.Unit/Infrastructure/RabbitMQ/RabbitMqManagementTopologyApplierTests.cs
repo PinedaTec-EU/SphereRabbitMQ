@@ -43,16 +43,12 @@ public sealed class RabbitMqManagementTopologyApplierTests
     public async Task ApplyAsync_WithMigrate_RecreatesGeneratedQueueAndBinding()
     {
         var apiClientMock = new Mock<IRabbitMqManagementApiClient>(MockBehavior.Strict);
-        apiClientMock.Setup(client => client.UpsertQueueAsync("sales", It.Is<QueueDefinition>(queue => queue.Name == "sprmq.migration.lock"), It.IsAny<CancellationToken>())).Returns(ValueTask.CompletedTask);
-        apiClientMock.Setup(client => client.PublishMessageAsync("sales", "", "sprmq.migration.lock", "lock-token", "string", null, It.IsAny<CancellationToken>())).Returns(ValueTask.CompletedTask);
         apiClientMock.Setup(client => client.DeleteQueueAsync("sales", "orders.debug", It.IsAny<CancellationToken>())).Returns(ValueTask.CompletedTask);
         apiClientMock.Setup(client => client.UpsertQueueAsync("sales", It.Is<QueueDefinition>(queue => queue.Name == "orders.debug"), It.IsAny<CancellationToken>())).Returns(ValueTask.CompletedTask);
         apiClientMock.Setup(client => client.CreateBindingAsync("sales", It.Is<BindingDefinition>(binding => binding.Destination == "orders.debug"), It.IsAny<CancellationToken>())).Returns(ValueTask.CompletedTask);
-        apiClientMock.Setup(client => client.GetMessagesAsync("sales", "sprmq.migration.lock", 1, It.IsAny<CancellationToken>()))
-            .Returns(new ValueTask<IReadOnlyList<global::SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Management.Models.ManagementRetrievedMessageModel>>(
-                [new global::SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Management.Models.ManagementRetrievedMessageModel { Payload = "lock-token" }]));
+        var migrationLock = new FakeTopologyMigrationLock();
 
-        ITopologyApplier topologyApplier = new RabbitMqManagementTopologyApplier(apiClientMock.Object);
+        ITopologyApplier topologyApplier = new RabbitMqManagementTopologyApplier(apiClientMock.Object, migrationLock: migrationLock);
         var desiredTopology = new TopologyDefinition(
         [
             new VirtualHostDefinition(
@@ -99,5 +95,36 @@ public sealed class RabbitMqManagementTopologyApplierTests
         apiClientMock.Verify(client => client.DeleteQueueAsync("sales", "orders.debug", It.IsAny<CancellationToken>()), Times.Once);
         apiClientMock.Verify(client => client.UpsertQueueAsync("sales", It.Is<QueueDefinition>(queue => queue.Name == "orders.debug"), It.IsAny<CancellationToken>()), Times.Once);
         apiClientMock.Verify(client => client.CreateBindingAsync("sales", It.Is<BindingDefinition>(binding => binding.Destination == "orders.debug"), It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Equal(["sales"], migrationLock.AcquiredVirtualHosts);
+        Assert.Equal(1, migrationLock.ReleasedCount);
+    }
+
+    private sealed class FakeTopologyMigrationLock : ITopologyMigrationLock
+    {
+        public List<string> AcquiredVirtualHosts { get; } = [];
+
+        public int ReleasedCount { get; private set; }
+
+        public ValueTask<IAsyncDisposable> AcquireAsync(string virtualHostName, CancellationToken cancellationToken = default)
+        {
+            AcquiredVirtualHosts.Add(virtualHostName);
+            return ValueTask.FromResult<IAsyncDisposable>(new FakeMigrationLockHandle(() => ReleasedCount++));
+        }
+
+        private sealed class FakeMigrationLockHandle : IAsyncDisposable
+        {
+            private readonly Action _onDispose;
+
+            public FakeMigrationLockHandle(Action onDispose)
+            {
+                _onDispose = onDispose;
+            }
+
+            public ValueTask DisposeAsync()
+            {
+                _onDispose();
+                return ValueTask.CompletedTask;
+            }
+        }
     }
 }

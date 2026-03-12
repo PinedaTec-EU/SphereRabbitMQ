@@ -305,6 +305,71 @@ public sealed class RabbitMqRuntimeIntegrationTests
     }
 
     [Fact]
+    public async Task SubscriberPrefetch_IsBoundedByPrefetchCount_EvenWhenMaxConcurrencyIsHigher()
+    {
+        if (!_fixture.IsAvailable)
+        {
+            return;
+        }
+
+        var services = CreateServices();
+        await using var provider = services.BuildServiceProvider();
+        var publisher = provider.GetRequiredService<IRabbitMQPublisher>();
+        var subscriber = provider.GetRequiredService<IRabbitMQSubscriber>();
+        await PurgeQueuesAsync("orders.created", "orders.created.retry.step1", "orders.created.dlq");
+        var started = 0;
+        var invocationCount = 0;
+        var firstStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseHandlers = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+
+        var subscription = Task.Run(() => subscriber.SubscribeAsync(
+            new SubscriberDefinition<OrderCreated>
+            {
+                QueueName = "orders.created",
+                PrefetchCount = 1,
+                MaxConcurrency = 4,
+                Handler = async (_, cancellationToken) =>
+                {
+                    var invocation = Interlocked.Increment(ref invocationCount);
+                    if (invocation == 1)
+                    {
+                        firstStarted.TrySetResult();
+                    }
+                    else if (invocation == 2)
+                    {
+                        secondStarted.TrySetResult();
+                    }
+
+                    Interlocked.Increment(ref started);
+                    try
+                    {
+                        await releaseHandlers.Task.WaitAsync(cancellationToken);
+                    }
+                    finally
+                    {
+                        Interlocked.Decrement(ref started);
+                    }
+                },
+            },
+            cts.Token));
+
+        await publisher.PublishAsync("orders", "orders.created", new OrderCreated("prefetch-1"));
+        await publisher.PublishAsync("orders", "orders.created", new OrderCreated("prefetch-2"));
+
+        await firstStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.Delay(500);
+
+        Assert.False(secondStarted.Task.IsCompleted);
+
+        releaseHandlers.TrySetResult();
+        await secondStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        cts.Cancel();
+        await IgnoreCancellationAsync(subscription);
+    }
+
+    [Fact]
     public async Task PublishAsync_FailsExplicitly_WhenExchangeDoesNotExist()
     {
         if (!_fixture.IsAvailable)
@@ -320,6 +385,29 @@ public sealed class RabbitMqRuntimeIntegrationTests
             publisher.PublishAsync("orders.missing", "orders.created", new OrderCreated("missing-exchange")));
 
         Assert.Contains("does not exist", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task PublishAsync_WithInvalidRoutingKey_DoesNotReachAnyBoundQueue()
+    {
+        if (!_fixture.IsAvailable)
+        {
+            return;
+        }
+
+        var services = CreateServices();
+        await using var provider = services.BuildServiceProvider();
+        var publisher = provider.GetRequiredService<IRabbitMQPublisher>();
+        await PurgeQueuesAsync("orders.created", "orders.created.high", "orders.created.low", "orders.created.multi");
+
+        await Assert.ThrowsAsync<PublishException>(() =>
+            publisher.PublishAsync("orders", "orders.created.invalid", new OrderCreated("missing-route")));
+        await Task.Delay(500);
+
+        Assert.Equal(0u, await CountMessagesAsync("orders.created"));
+        Assert.Equal(0u, await CountMessagesAsync("orders.created.high"));
+        Assert.Equal(0u, await CountMessagesAsync("orders.created.low"));
+        Assert.Equal(0u, await CountMessagesAsync("orders.created.multi"));
     }
 
     [Fact]
@@ -658,6 +746,117 @@ public sealed class RabbitMqRuntimeIntegrationTests
     }
 
     [Fact]
+    public async Task RetryForwardFailure_DoesNotAcknowledgeOriginalMessage()
+    {
+        if (!_fixture.IsAvailable)
+        {
+            return;
+        }
+
+        var services = CreateServices();
+        await using var provider = services.BuildServiceProvider();
+        var publisher = provider.GetRequiredService<IRabbitMQPublisher>();
+        var subscriber = provider.GetRequiredService<IRabbitMQSubscriber>();
+        await PurgeQueuesAsync("orders.created", "orders.created.retry.step1", "orders.created.dlq");
+        var firstAttemptStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowFailure = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+
+        try
+        {
+            var subscription = Task.Run(() => subscriber.SubscribeAsync(
+                new SubscriberDefinition<OrderCreated>
+                {
+                    QueueName = "orders.created",
+                    PrefetchCount = 1,
+                    MaxConcurrency = 1,
+                    ErrorHandling = new SubscriberErrorHandlingSettings
+                    {
+                        Strategy = SubscriberErrorStrategyKind.RetryOnly,
+                        MaxRetryAttempts = 1,
+                    },
+                    Handler = async (_, cancellationToken) =>
+                    {
+                        firstAttemptStarted.TrySetResult();
+                        await allowFailure.Task.WaitAsync(cancellationToken);
+                        throw new InvalidOperationException("force retry forward failure");
+                    },
+                },
+                cts.Token));
+
+            await publisher.PublishAsync("orders", "orders.created", new OrderCreated("retry-forward-failure"));
+            await firstAttemptStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await DeleteExchangeAsync("orders.created.retry");
+            allowFailure.TrySetResult();
+            await Task.Delay(750);
+            cts.Cancel();
+            await IgnoreCancellationAsync(subscription);
+        }
+        finally
+        {
+            await EnsureRetryTopologyAsync();
+        }
+
+        Assert.Equal(1u, await CountMessagesAsync("orders.created"));
+        Assert.Equal(0u, await CountMessagesAsync("orders.created.retry.step1"));
+    }
+
+    [Fact]
+    public async Task DeadLetterForwardFailure_DoesNotAcknowledgeOriginalMessage()
+    {
+        if (!_fixture.IsAvailable)
+        {
+            return;
+        }
+
+        var services = CreateServices();
+        await using var provider = services.BuildServiceProvider();
+        var publisher = provider.GetRequiredService<IRabbitMQPublisher>();
+        var subscriber = provider.GetRequiredService<IRabbitMQSubscriber>();
+        await PurgeQueuesAsync("orders.created", "orders.created.retry.step1", "orders.created.dlq");
+        var firstAttemptStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowFailure = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+
+        try
+        {
+            var subscription = Task.Run(() => subscriber.SubscribeAsync(
+                new SubscriberDefinition<OrderCreated>
+                {
+                    QueueName = "orders.created",
+                    PrefetchCount = 1,
+                    MaxConcurrency = 1,
+                    ErrorHandling = new SubscriberErrorHandlingSettings
+                    {
+                        Strategy = SubscriberErrorStrategyKind.DeadLetterOnly,
+                    },
+                    Handler = async (_, cancellationToken) =>
+                    {
+                        firstAttemptStarted.TrySetResult();
+                        await allowFailure.Task.WaitAsync(cancellationToken);
+                        throw new InvalidOperationException("force dead-letter forward failure");
+                    },
+                },
+                cts.Token));
+
+            await publisher.PublishAsync("orders", "orders.created", new OrderCreated("dead-letter-forward-failure"));
+            await firstAttemptStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await DeleteExchangeAsync("orders.created.dlx");
+            allowFailure.TrySetResult();
+            await Task.Delay(750);
+            cts.Cancel();
+            await IgnoreCancellationAsync(subscription);
+        }
+        finally
+        {
+            await EnsureDeadLetterTopologyAsync();
+        }
+
+        Assert.Equal(1u, await CountMessagesAsync("orders.created"));
+        Assert.Equal(0u, await CountMessagesAsync("orders.created.dlq"));
+    }
+
+    [Fact]
     public async Task RetryOnlyAsync_DoesNotNotify_WhenRetriesAreExhaustedWithoutDeadLetter()
     {
         if (!_fixture.IsAvailable)
@@ -978,6 +1177,48 @@ public sealed class RabbitMqRuntimeIntegrationTests
         };
 
         await channel.BasicPublishAsync(exchange, routingKey, true, properties, body, CancellationToken.None);
+    }
+
+    private async Task DeleteExchangeAsync(string exchangeName)
+    {
+        var factory = _fixture.CreateConnectionFactory();
+        await using var connection = await factory.CreateConnectionAsync();
+        await using var channel = await connection.CreateChannelAsync();
+        await channel.ExchangeDeleteAsync(exchangeName, false, false, CancellationToken.None);
+    }
+
+    private async Task EnsureRetryTopologyAsync()
+    {
+        var factory = _fixture.CreateConnectionFactory();
+        await using var connection = await factory.CreateConnectionAsync();
+        await using var channel = await connection.CreateChannelAsync();
+
+        await channel.ExchangeDeclareAsync("orders.created.retry", "direct", true, false, null, false, false);
+        await channel.QueueDeclareAsync(
+            "orders.created.retry.step1",
+            true,
+            false,
+            false,
+            new Dictionary<string, object?>
+            {
+                ["x-message-ttl"] = 250,
+                ["x-dead-letter-exchange"] = "orders",
+                ["x-dead-letter-routing-key"] = "orders.created",
+            },
+            false,
+            false);
+        await channel.QueueBindAsync("orders.created.retry.step1", "orders.created.retry", "orders.created.retry.step1", null, false);
+    }
+
+    private async Task EnsureDeadLetterTopologyAsync()
+    {
+        var factory = _fixture.CreateConnectionFactory();
+        await using var connection = await factory.CreateConnectionAsync();
+        await using var channel = await connection.CreateChannelAsync();
+
+        await channel.ExchangeDeclareAsync("orders.created.dlx", "direct", true, false, null, false, false);
+        await channel.QueueDeclareAsync("orders.created.dlq", true, false, false, null, false, false);
+        await channel.QueueBindAsync("orders.created.dlq", "orders.created.dlx", "orders.created.dlq", null, false);
     }
 
     private static async Task IgnoreCancellationAsync(Task task)

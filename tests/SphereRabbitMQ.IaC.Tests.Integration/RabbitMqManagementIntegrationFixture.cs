@@ -1,5 +1,3 @@
-using System.Net.Sockets;
-
 using SphereRabbitMQ.IaC.Application.Apply.Interfaces;
 using SphereRabbitMQ.IaC.Application.Broker.Interfaces;
 using SphereRabbitMQ.IaC.Application.Export.Interfaces;
@@ -35,6 +33,8 @@ public sealed class RabbitMqManagementIntegrationFixture : IAsyncLifetime, IDisp
     public ITopologyDestroyPlanner TopologyDestroyPlanner { get; }
 
     public bool SupportsRuntimeQueueMigration { get; private set; }
+
+    private readonly RabbitMqRuntimeTopologyMigrationLock? _migrationLock;
 
     private readonly RabbitMqRuntimeQueueMigrationMessageMover? _queueMigrationMessageMover;
 
@@ -80,8 +80,9 @@ public sealed class RabbitMqManagementIntegrationFixture : IAsyncLifetime, IDisp
 
         ApiClient = new RabbitMqManagementApiClient(_httpClient, Options);
         BrokerTopologyReader = new RabbitMqManagementTopologyReader(ApiClient, Options);
+        _migrationLock = new RabbitMqRuntimeTopologyMigrationLock(Options);
         _queueMigrationMessageMover = new RabbitMqRuntimeQueueMigrationMessageMover(Options);
-        TopologyApplier = new RabbitMqManagementTopologyApplier(ApiClient, _queueMigrationMessageMover);
+        TopologyApplier = new RabbitMqManagementTopologyApplier(ApiClient, _queueMigrationMessageMover, _migrationLock);
         TopologyExporter = new RabbitMqManagementTopologyExporter(BrokerTopologyReader);
         TopologyPlanner = new TopologyPlannerService();
         TopologyDestroyPlanner = new TopologyDestroyPlannerService();
@@ -130,11 +131,14 @@ public sealed class RabbitMqManagementIntegrationFixture : IAsyncLifetime, IDisp
 
     private async Task<bool> CanReachAmqpAsync()
     {
-        using var tcpClient = new TcpClient();
-
         try
         {
-            await tcpClient.ConnectAsync(Options.AmqpHostName ?? Options.BaseUri.Host, Options.AmqpPort);
+            if (_migrationLock is null)
+            {
+                return false;
+            }
+
+            await using var migrationLockHandle = await _migrationLock.AcquireAsync(VirtualHostName);
             return true;
         }
         catch

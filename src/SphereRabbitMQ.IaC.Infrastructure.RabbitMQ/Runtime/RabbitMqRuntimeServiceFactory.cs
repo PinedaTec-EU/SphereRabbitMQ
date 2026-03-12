@@ -49,9 +49,11 @@ public sealed class RabbitMqRuntimeServiceFactory : IRabbitMqRuntimeServiceFacto
         var httpClient = new HttpClient();
         IRabbitMqManagementApiClient managementApiClient = new RabbitMqManagementApiClient(httpClient, options);
         IBrokerTopologyReader brokerTopologyReader = new RabbitMqManagementTopologyReader(managementApiClient, options);
+        var migrationLock = new RabbitMqRuntimeTopologyMigrationLock(options);
         ITopologyApplier topologyApplier = new RabbitMqManagementTopologyApplier(
             managementApiClient,
-            new RabbitMqRuntimeQueueMigrationMessageMover(options));
+            new RabbitMqRuntimeQueueMigrationMessageMover(options),
+            migrationLock);
         ITopologyExporter topologyExporter = new RabbitMqManagementTopologyExporter(brokerTopologyReader);
         ITopologyWorkflowService topologyWorkflowService = new TopologyWorkflowService(
             _topologyParser,

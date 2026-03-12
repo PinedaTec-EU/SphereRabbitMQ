@@ -13,10 +13,6 @@ namespace SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Apply;
 /// </summary>
 public sealed class RabbitMqManagementTopologyApplier : ITopologyApplier
 {
-    private const int LockAcquireDelayMilliseconds = 250;
-    private const int LockAcquireMaxAttempts = 120;
-    private const string MigrationLockQueueName = "sprmq.migration.lock";
-    private const string MigrationLockTokenPayload = "lock-token";
     private const int MessageDrainBatchSize = 100;
     private const string DefaultExchangeName = "";
     private const string GeneratedByMetadataKey = "generated-by";
@@ -25,6 +21,7 @@ public sealed class RabbitMqManagementTopologyApplier : ITopologyApplier
     private const string SourceQueueMetadataKey = "source-queue";
 
     private readonly IRabbitMqManagementApiClient _apiClient;
+    private readonly ITopologyMigrationLock? _migrationLock;
     private readonly IQueueMigrationMessageMover? _queueMessageMover;
 
     /// <summary>
@@ -32,11 +29,13 @@ public sealed class RabbitMqManagementTopologyApplier : ITopologyApplier
     /// </summary>
     public RabbitMqManagementTopologyApplier(
         IRabbitMqManagementApiClient apiClient,
-        IQueueMigrationMessageMover? queueMessageMover = null)
+        IQueueMigrationMessageMover? queueMessageMover = null,
+        ITopologyMigrationLock? migrationLock = null)
     {
         ArgumentNullException.ThrowIfNull(apiClient);
         _apiClient = apiClient;
         _queueMessageMover = queueMessageMover;
+        _migrationLock = migrationLock;
     }
 
     /// <inheritdoc />
@@ -310,48 +309,13 @@ public sealed class RabbitMqManagementTopologyApplier : ITopologyApplier
         Func<Task> action,
         CancellationToken cancellationToken)
     {
-        await AcquireMigrationLockAsync(virtualHostName, cancellationToken);
-
-        try
+        if (_migrationLock is null)
         {
-            await action();
-        }
-        finally
-        {
-            await ReleaseMigrationLockAsync(virtualHostName, cancellationToken);
-        }
-    }
-
-    private async ValueTask AcquireMigrationLockAsync(string virtualHostName, CancellationToken cancellationToken)
-    {
-        await _apiClient.UpsertQueueAsync(virtualHostName, CreateMigrationLockQueueDefinition(), cancellationToken);
-
-        for (var attempt = 0; attempt < LockAcquireMaxAttempts; attempt++)
-        {
-            try
-            {
-                await _apiClient.PublishMessageAsync(
-                    virtualHostName,
-                    DefaultExchangeName,
-                    MigrationLockQueueName,
-                    MigrationLockTokenPayload,
-                    "string",
-                    null,
-                    cancellationToken);
-                return;
-            }
-            catch (HttpRequestException)
-            {
-                await Task.Delay(LockAcquireDelayMilliseconds, cancellationToken);
-            }
+            throw new InvalidOperationException("Broker-assisted migrations require an AMQP topology migration lock.");
         }
 
-        throw new TimeoutException($"Unable to acquire the migration lock queue '{MigrationLockQueueName}' in virtual host '{virtualHostName}'.");
-    }
-
-    private async ValueTask ReleaseMigrationLockAsync(string virtualHostName, CancellationToken cancellationToken)
-    {
-        await _apiClient.GetMessagesAsync(virtualHostName, MigrationLockQueueName, 1, cancellationToken);
+        await using var migrationLockHandle = await _migrationLock.AcquireAsync(virtualHostName, cancellationToken);
+        await action();
     }
 
     private static MigrationPlan BuildMigrationPlan(TopologyDefinition desired, TopologyPlan plan)
@@ -471,20 +435,6 @@ public sealed class RabbitMqManagementTopologyApplier : ITopologyApplier
             new Dictionary<string, object?>(StringComparer.Ordinal)
             {
                 ["x-queue-type"] = "classic",
-            });
-
-    private static QueueDefinition CreateMigrationLockQueueDefinition()
-        => new(
-            MigrationLockQueueName,
-            QueueType.Classic,
-            true,
-            false,
-            false,
-            new Dictionary<string, object?>(StringComparer.Ordinal)
-            {
-                ["x-queue-type"] = "classic",
-                ["x-max-length"] = 1,
-                ["x-overflow"] = "reject-publish",
             });
 
     private static bool IsGeneratedQueue(QueueDefinition queue)
