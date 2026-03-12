@@ -80,6 +80,7 @@ public sealed class TopologyYamlDocumentWriterTests
                                 ExchangeName = "orders.dlx",
                                 QueueName = "orders.created.dlq",
                                 RoutingKey = "orders.created.dead",
+                                Ttl = "00:05:00",
                             },
                             Retry = new RetryDocument
                             {
@@ -140,6 +141,7 @@ public sealed class TopologyYamlDocumentWriterTests
         Assert.Contains("queues:", yaml, StringComparison.Ordinal);
         Assert.Contains("deadLetter:", yaml, StringComparison.Ordinal);
         Assert.Contains("exchangeName: orders.dlx", yaml, StringComparison.Ordinal);
+        Assert.Contains("ttl: 00:05:00", yaml, StringComparison.Ordinal);
         Assert.Contains("retry:", yaml, StringComparison.Ordinal);
         Assert.Contains("autoGenerateArtifacts: false", yaml, StringComparison.Ordinal);
         Assert.Contains("parkingLotQueueName: orders.parking", yaml, StringComparison.Ordinal);

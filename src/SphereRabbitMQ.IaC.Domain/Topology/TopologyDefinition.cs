@@ -190,6 +190,15 @@ public sealed record TopologyDefinition
             return;
         }
 
+        if (queue.DeadLetter is not { Enabled: true })
+        {
+            issues.Add(new TopologyIssue(
+                "retry-requires-dead-letter",
+                "Retry configuration requires dead-letter to be enabled for the same queue.",
+                path,
+                TopologyIssueSeverity.Error));
+        }
+
         ValidateRetrySteps(queue.Name, retry, namingPolicy, path, generatedNames, issues);
         RegisterGeneratedName(retry.ExchangeName ?? namingPolicy.GetRetryExchangeName(queue.Name), path, generatedNames, issues);
         RegisterGeneratedName(retry.ParkingLotQueueName ?? namingPolicy.GetParkingLotQueueName(queue.Name), path, generatedNames, issues);

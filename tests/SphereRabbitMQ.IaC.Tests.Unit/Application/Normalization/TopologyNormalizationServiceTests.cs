@@ -183,4 +183,37 @@ public sealed class TopologyNormalizationServiceTests
             binding.Destination == "orders.dlq" &&
             binding.RoutingKey == "orders");
     }
+
+    [Fact]
+    public async Task NormalizeAsync_AppliesDeadLetterQueueTtl_WhenConfigured()
+    {
+        ITopologyNormalizer topologyNormalizer = new TopologyNormalizationService();
+        var topologyDocument = new TopologyDocument
+        {
+            VirtualHosts =
+            [
+                new VirtualHostDocument
+                {
+                    Name = "sales",
+                    Queues =
+                    [
+                        new QueueDocument
+                        {
+                            Name = "orders",
+                            DeadLetter = new DeadLetterDocument
+                            {
+                                Enabled = true,
+                                Ttl = "00:02:00",
+                            },
+                        },
+                    ],
+                },
+            ],
+        };
+
+        var topologyDefinition = await topologyNormalizer.NormalizeAsync(topologyDocument);
+        var deadLetterQueue = topologyDefinition.VirtualHosts.Single().Queues.Single(queue => queue.Name == "orders.dlq");
+
+        Assert.Equal(120000L, deadLetterQueue.Arguments["x-message-ttl"]);
+    }
 }

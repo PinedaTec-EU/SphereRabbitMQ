@@ -136,6 +136,7 @@ public sealed class TopologyYamlParser : ITopologyParser
                 ExchangeName = ResolveOptional(document.ExchangeName, variables),
                 QueueName = ResolveOptional(document.QueueName, variables),
                 RoutingKey = ResolveOptional(document.RoutingKey, variables),
+                Ttl = ResolveOptional(document.Ttl, variables),
             };
 
     private RetryYamlDocument? ResolveRetry(

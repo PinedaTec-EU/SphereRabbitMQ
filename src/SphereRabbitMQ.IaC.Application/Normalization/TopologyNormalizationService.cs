@@ -109,7 +109,7 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
         var queueType = ParseQueueType(document.Type, $"/virtualHosts/{virtualHostName}/queues/{document.Name}", issues);
         var normalizedArguments = NormalizeObjectDictionary(document.Arguments).ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
         var ttl = NormalizeQueueTtl(virtualHostName, document.Name, document.Ttl, issues);
-        var deadLetter = NormalizeDeadLetter(document.DeadLetter);
+        var deadLetter = NormalizeDeadLetter(virtualHostName, document.Name, document.DeadLetter, issues);
         var retry = NormalizeRetry(virtualHostName, document.Name, document.Retry, issues);
 
         ApplyDerivedQueueArguments(document.Name, normalizedArguments, ttl, deadLetter, retry, namingPolicy, issues);
@@ -182,7 +182,7 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
         var routingKey = deadLetter.RoutingKey ?? queue.Name;
 
         exchanges.Add(CreateGeneratedExchange(exchangeName, queue.Name));
-        queues.Add(CreateGeneratedQueue(queueName, queue.Name, null, null));
+        queues.Add(CreateGeneratedQueue(queueName, queue.Name, deadLetter.Ttl, null));
         bindings.Add(CreateGeneratedBinding(exchangeName, queueName, routingKey, queue.Name));
     }
 
@@ -385,6 +385,31 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
         return parsedTtl;
     }
 
+    private static TimeSpan? NormalizeDeadLetterTtl(
+        string virtualHostName,
+        string queueName,
+        string? ttl,
+        ICollection<TopologyIssue> issues)
+    {
+        if (string.IsNullOrWhiteSpace(ttl))
+        {
+            return null;
+        }
+
+        var path = $"/virtualHosts/{virtualHostName}/queues/{queueName}/deadLetter/ttl";
+        if (!TimeSpan.TryParse(ttl, out var parsedTtl) || parsedTtl <= TimeSpan.Zero)
+        {
+            issues.Add(new TopologyIssue(
+                "invalid-dead-letter-ttl",
+                $"Dead-letter ttl '{ttl}' is invalid. Use a positive TimeSpan value.",
+                path,
+                TopologyIssueSeverity.Error));
+            return null;
+        }
+
+        return parsedTtl;
+    }
+
     private static void EnsureQueueTypeArgument(QueueType queueType, IDictionary<string, object?> arguments)
     {
         var queueTypeValue = queueType switch
@@ -419,10 +444,20 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
         arguments[key] = value;
     }
 
-    private static DeadLetterDefinition? NormalizeDeadLetter(DeadLetterDocument? document)
-        => document is null
-            ? null
-            : new DeadLetterDefinition(document.Enabled, document.ExchangeName, document.QueueName, document.RoutingKey);
+    private static DeadLetterDefinition? NormalizeDeadLetter(
+        string virtualHostName,
+        string queueName,
+        DeadLetterDocument? document,
+        ICollection<TopologyIssue> issues)
+    {
+        if (document is null)
+        {
+            return null;
+        }
+
+        var ttl = NormalizeDeadLetterTtl(virtualHostName, queueName, document.Ttl, issues);
+        return new DeadLetterDefinition(document.Enabled, document.ExchangeName, document.QueueName, document.RoutingKey, ttl);
+    }
 
     private static RetryDefinition? NormalizeRetry(
         string virtualHostName,

@@ -15,4 +15,6 @@ public sealed record DeadLetterYamlDocument
     public string? QueueName { get; init; }
 
     public string? RoutingKey { get; init; }
+
+    public string? Ttl { get; init; }
 }

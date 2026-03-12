@@ -87,6 +87,7 @@ public static class YamlTopologyDocumentMapper
                     ExchangeName = yamlDocument.DeadLetter.ExchangeName,
                     QueueName = yamlDocument.DeadLetter.QueueName,
                     RoutingKey = yamlDocument.DeadLetter.RoutingKey,
+                    Ttl = yamlDocument.DeadLetter.Ttl,
                 },
             Retry = yamlDocument.Retry is null
                 ? null

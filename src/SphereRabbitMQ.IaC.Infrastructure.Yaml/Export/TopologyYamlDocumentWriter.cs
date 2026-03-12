@@ -101,6 +101,7 @@ public sealed class TopologyYamlDocumentWriter : ITopologyDocumentWriter
                     ExchangeName = document.DeadLetter.ExchangeName,
                     QueueName = document.DeadLetter.QueueName,
                     RoutingKey = document.DeadLetter.RoutingKey,
+                    Ttl = document.DeadLetter.Ttl,
                 },
             Retry = document.Retry is null
                 ? null

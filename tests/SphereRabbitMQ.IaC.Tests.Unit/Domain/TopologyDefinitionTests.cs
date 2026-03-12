@@ -32,6 +32,7 @@ public sealed class TopologyDefinitionTests
     {
         var queueOne = new QueueDefinition(
             "orders",
+            deadLetter: new DeadLetterDefinition(enabled: true),
             retry: new RetryDefinition(
             [
                 new RetryStepDefinition(TimeSpan.FromMinutes(1), name: "attempt"),
@@ -40,6 +41,7 @@ public sealed class TopologyDefinitionTests
 
         var queueTwo = new QueueDefinition(
             "payments",
+            deadLetter: new DeadLetterDefinition(enabled: true),
             retry: new RetryDefinition(
             [
                 new RetryStepDefinition(TimeSpan.FromMinutes(2), name: "attempt"),
@@ -62,6 +64,7 @@ public sealed class TopologyDefinitionTests
     {
         var queueOne = new QueueDefinition(
             "orders",
+            deadLetter: new DeadLetterDefinition(enabled: true),
             retry: new RetryDefinition(
             [
                 new RetryStepDefinition(TimeSpan.FromMinutes(1), name: "fast"),
@@ -70,6 +73,7 @@ public sealed class TopologyDefinitionTests
 
         var queueTwo = new QueueDefinition(
             "payments",
+            deadLetter: new DeadLetterDefinition(enabled: true),
             retry: new RetryDefinition(
             [
                 new RetryStepDefinition(TimeSpan.FromMinutes(2), name: "slow"),
@@ -85,5 +89,29 @@ public sealed class TopologyDefinitionTests
 
         Assert.True(result.IsValid);
         Assert.DoesNotContain(result.Issues, issue => issue.Code == "generated-name-collision");
+    }
+
+    [Fact]
+    public void Validate_ReturnsError_WhenRetryIsEnabledWithoutDeadLetter()
+    {
+        var topology = new TopologyDefinition(
+        [
+            new VirtualHostDefinition(
+                "sales",
+                queues:
+                [
+                    new QueueDefinition(
+                        "orders",
+                        retry: new RetryDefinition(
+                        [
+                            new RetryStepDefinition(TimeSpan.FromMinutes(1), name: "fast"),
+                        ])),
+                ]),
+        ]);
+
+        var result = topology.Validate();
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Issues, issue => issue.Code == "retry-requires-dead-letter");
     }
 }
