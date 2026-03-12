@@ -22,10 +22,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\SphereRabbitMQ.Abstractions\SphereRabbitMQ.Abstractions.csproj" />
-    <ProjectReference Include="..\SphereRabbitMQ.Application\SphereRabbitMQ.Application.csproj" />
-    <ProjectReference Include="..\SphereRabbitMQ.Domain\SphereRabbitMQ.Domain.csproj" />
-    <ProjectReference Include="..\SphereRabbitMQ.Infrastructure.RabbitMQ\SphereRabbitMQ.Infrastructure.RabbitMQ.csproj" />
+    <ProjectReference Include="..\SphereRabbitMQ.Abstractions\SphereRabbitMQ.Abstractions.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\SphereRabbitMQ.Application\SphereRabbitMQ.Application.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\SphereRabbitMQ.Domain\SphereRabbitMQ.Domain.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\SphereRabbitMQ.Infrastructure.RabbitMQ\SphereRabbitMQ.Infrastructure.RabbitMQ.csproj" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>
