@@ -73,19 +73,20 @@ using SphereRabbitMQ.DependencyInjection;
 
 var services = new ServiceCollection();
 
+const string rabbitMqConnectionString = "amqp://guest:guest@localhost:5672/%2f";
+const string ordersExchangeName = "orders";
+const string orderCreatedRoutingKey = "orders.created";
+
 services.AddSphereRabbitMq(options =>
 {
-    options.HostName = "localhost";
-    options.Port = 5672;
-    options.UserName = "guest";
-    options.Password = "guest";
+    options.SetConnectionString(rabbitMqConnectionString);
 });
 
 services.AddRabbitPublisher<OrderCreated>(config =>
 {
     config
-        .ToExchange("orders")
-        .WithRoutingKey("orders.created");
+        .ToExchange(ordersExchangeName)
+        .WithRoutingKey(orderCreatedRoutingKey);
 });
 
 await using var provider = services.BuildServiceProvider();
@@ -108,24 +109,27 @@ using SphereRabbitMQ.DependencyInjection;
 
 var services = new ServiceCollection();
 
+const string rabbitMqConnectionString = "amqp://guest:guest@localhost:5672/%2f";
+const string orderCreatedQueueName = "orders.created";
+const ushort orderCreatedPrefetchCount = 10;
+const int orderCreatedMaxConcurrency = 4;
+const int orderCreatedMaxRetryAttempts = 5;
+
 services.AddSphereRabbitMq(options =>
 {
-    options.HostName = "localhost";
-    options.Port = 5672;
-    options.UserName = "guest";
-    options.Password = "guest";
+    options.SetConnectionString(rabbitMqConnectionString);
     options.ValidateTopologyOnStartup = true;
 });
 
 services.AddRabbitSubscriber<OrderCreated, OrderCreatedSubscriber>(
-    "orders.created",
+    orderCreatedQueueName,
     config =>
     {
         config
-            .WithPrefetchCount(10)
-            .WithMaxConcurrency(4);
+            .WithPrefetchCount(orderCreatedPrefetchCount)
+            .WithMaxConcurrency(orderCreatedMaxConcurrency);
 
-        config.ErrorHandling.UseRetryAndDeadLetter(5);
+        config.ErrorHandling.UseRetryAndDeadLetter(maxRetryAttempts: orderCreatedMaxRetryAttempts);
     });
 ```
 

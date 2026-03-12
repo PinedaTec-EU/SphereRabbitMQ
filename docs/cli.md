@@ -85,7 +85,7 @@ If the plan contains destructive or unsupported changes, `apply` stops and repor
 
 Operational rules:
 
-- a per-virtual-host lock queue named `sprmq.migration.lock` is used to serialize migrations across concurrent CLI instances
+- an ephemeral per-virtual-host AMQP lock queue named `sprmq.migration.lock` is used to serialize migrations across concurrent CLI instances
 - incompatible exchanges are deleted and recreated, then bindings are restored from the YAML definition
 - generated debug queues are deleted and recreated without preserving messages
 - generated retry/dead-letter/parking queues are deleted and recreated without preserving messages
@@ -106,6 +106,7 @@ Operational consequences:
 - generated queues do not preserve messages
 - mainstream queue migration tries to preserve buffered messages and binding order, but it is still an operational migration and should be scheduled carefully
 - concurrent `--migrate` executions on the same virtual host are serialized through `sprmq.migration.lock`
+- the migration lock queue is `exclusive` and `auto-delete`, so it disappears automatically when the CLI instance releases the connection
 
 Example:
 
@@ -264,6 +265,7 @@ queues:
           delay: "00:00:30"
     deadLetter:
       enabled: true
+      ttl: "07:00:00"
 ```
 
 The resulting topology is conceptually:
@@ -291,6 +293,8 @@ Operationally:
 - each retry queue uses TTL
 - when TTL expires, the message is dead-lettered back to the main flow
 - dead-letter artifacts remain separate and visible in the plan
+- if retry is enabled for a queue, dead-letter must also be enabled for that queue
+- the dead-letter queue can define its own optional `ttl`, which maps to `x-message-ttl`
 
 Important restriction:
 
