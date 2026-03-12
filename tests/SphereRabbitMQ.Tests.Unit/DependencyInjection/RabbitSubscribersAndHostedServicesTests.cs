@@ -9,6 +9,7 @@ using Moq;
 using SphereRabbitMQ.Abstractions.Configuration;
 using SphereRabbitMQ.Abstractions.Subscribers;
 using SphereRabbitMQ.Abstractions.Topology;
+using SphereRabbitMQ.DependencyInjection;
 using SphereRabbitMQ.DependencyInjection.Subscribers;
 using SphereRabbitMQ.Domain.Subscribers;
 using SphereRabbitMQ.Domain.Messaging;
@@ -99,6 +100,59 @@ public sealed class RabbitSubscriberRegistrationTests
         Assert.Equal(2, capturedDefinition.MaxConcurrency);
 
         subscriberMock.Verify(s => s.SubscribeAsync(It.IsAny<SubscriberDefinition<string>>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task AddRabbitSubscriberOverload_RegistersTypedHandlerWithQueue()
+    {
+        var services = new ServiceCollection();
+        services.AddRabbitSubscriber<string, SimpleStringHandler>("orders.queue");
+        await using var provider = services.BuildServiceProvider();
+
+        var registrations = provider.GetServices<IRabbitSubscriberRegistration>().ToArray();
+
+        Assert.Single(registrations);
+        var definition = registrations[0].BuildDefinition(provider);
+        Assert.Equal("orders.queue", definition.QueueName);
+        Assert.Equal(SubscriberErrorStrategyKind.DeadLetterOnly, definition.ErrorHandling.Strategy);
+    }
+
+    [Fact]
+    public async Task AddRabbitSubscriberOverload_RegistersInlineHandlerWithQueue()
+    {
+        var services = new ServiceCollection();
+        services.AddRabbitSubscriber<string>(
+            "orders.queue",
+            (_, _) => Task.CompletedTask,
+            builder => builder.WithMaxConcurrency(2));
+        await using var provider = services.BuildServiceProvider();
+
+        var registrations = provider.GetServices<IRabbitSubscriberRegistration>().ToArray();
+
+        Assert.Single(registrations);
+        var definition = registrations[0].BuildDefinition(provider);
+        Assert.Equal("orders.queue", definition.QueueName);
+        Assert.Equal(2, definition.MaxConcurrency);
+    }
+
+    [Fact]
+    public async Task AddKeyedRabbitSubscriber_RegistersSubscriberWithRequestedQueue()
+    {
+        var services = new ServiceCollection();
+        services.AddKeyedRabbitSubscriber<string, SimpleStringHandler>("inventory", "orders.queue");
+        await using var provider = services.BuildServiceProvider();
+
+        var registrations = provider.GetServices<IRabbitSubscriberRegistration>().ToArray();
+
+        Assert.Single(registrations);
+        var definition = registrations[0].BuildDefinition(provider);
+        Assert.Equal("orders.queue", definition.QueueName);
+    }
+
+    private sealed class SimpleStringHandler : IRabbitSubscriberMessageHandler<string>
+    {
+        public Task HandleAsync(MessageEnvelope<string> message, CancellationToken cancellationToken)
+            => Task.CompletedTask;
     }
 }
 

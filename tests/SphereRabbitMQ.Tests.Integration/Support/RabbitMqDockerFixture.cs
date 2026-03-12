@@ -47,8 +47,15 @@ public sealed class RabbitMqDockerFixture : IAsyncLifetime
 
         await channel.ExchangeDeclareAsync("orders", "topic", true, false, null, false, false);
         await channel.QueueDeclareAsync("orders.created", true, false, false, null, false, false);
+        await channel.QueueDeclareAsync("orders.created.high", true, false, false, null, false, false);
+        await channel.QueueDeclareAsync("orders.created.low", true, false, false, null, false, false);
+        await channel.QueueDeclareAsync("orders.created.multi", true, false, false, null, false, false);
         await channel.QueueDeclareAsync("orders.created.migration", true, false, false, null, false, false);
         await channel.QueueBindAsync("orders.created", "orders", "orders.created", null, false);
+        await channel.QueueBindAsync("orders.created.high", "orders", "orders.created.high", null, false);
+        await channel.QueueBindAsync("orders.created.low", "orders", "orders.created.low", null, false);
+        await channel.QueueBindAsync("orders.created.multi", "orders", "orders.created.eu", null, false);
+        await channel.QueueBindAsync("orders.created.multi", "orders", "orders.created.us", null, false);
 
         await channel.ExchangeDeclareAsync("orders.created.retry", "direct", true, false, null, false, false);
         await channel.QueueDeclareAsync(

@@ -1,0 +1,281 @@
+using System.Collections.Concurrent;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using SphereRabbitMQ.Abstractions.Publishing;
+using SphereRabbitMQ.Abstractions.Subscribers;
+using SphereRabbitMQ.DependencyInjection;
+using SphereRabbitMQ.Domain.Messaging;
+using SphereRabbitMQ.Tests.Integration.Support;
+
+namespace SphereRabbitMQ.Tests.Integration.Infrastructure;
+
+[Collection(RabbitMqIntegrationCollection.CollectionName)]
+public sealed class RabbitMqAdvancedConfigurationIntegrationTests
+{
+    private readonly RabbitMqDockerFixture _fixture;
+
+    public RabbitMqAdvancedConfigurationIntegrationTests(RabbitMqDockerFixture fixture)
+    {
+        _fixture = fixture;
+    }
+
+    [Fact]
+    public async Task MinimalTypedConfiguration_WorksWithDefaults()
+    {
+        if (!_fixture.IsAvailable)
+        {
+            return;
+        }
+
+        var services = CreateServices();
+        services.AddRabbitPublisher<OrderCreated>("orders", "orders.created");
+        services.AddRabbitSubscriber<OrderCreated>(
+            "orders.created",
+            (message, _) =>
+            {
+                MinimalTypedScenario.Received.TrySetResult(message.Body.OrderId);
+                return Task.CompletedTask;
+            },
+            builder => builder.ErrorHandling.UseDiscard());
+
+        await using var provider = services.BuildServiceProvider();
+        var hostedServices = provider.GetServices<IHostedService>().ToArray();
+        var publisher = provider.GetRequiredService<IMessagePublisher<OrderCreated>>();
+        await PurgeQueuesAsync("orders.created");
+        MinimalTypedScenario.Reset();
+
+        await StartHostedServicesAsync(hostedServices);
+        try
+        {
+            await publisher.PublishAsync(new OrderCreated("minimal-order"));
+            var orderId = await MinimalTypedScenario.Received.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            Assert.Equal("minimal-order", orderId);
+        }
+        finally
+        {
+            await StopHostedServicesAsync(hostedServices);
+        }
+    }
+
+    [Fact]
+    public async Task RoutingKeyOverride_AndKeyedSubscribers_RouteMessagesToMatchingQueues()
+    {
+        if (!_fixture.IsAvailable)
+        {
+            return;
+        }
+
+        var services = CreateServices();
+        services.AddRabbitPublisher<OrderCreated>("orders", "orders.created.high");
+        services.AddKeyedRabbitSubscriber<OrderCreated, HighPriorityOrderHandler>(
+            "high",
+            "orders.created.high",
+            builder => builder.ErrorHandling.UseDiscard());
+        services.AddKeyedRabbitSubscriber<OrderCreated, LowPriorityOrderHandler>(
+            "low",
+            "orders.created.low",
+            builder => builder.ErrorHandling.UseDiscard());
+
+        await using var provider = services.BuildServiceProvider();
+        var hostedServices = provider.GetServices<IHostedService>().ToArray();
+        var publisher = provider.GetRequiredService<IMessagePublisher<OrderCreated>>();
+        await PurgeQueuesAsync("orders.created.high", "orders.created.low");
+        HighPriorityOrderHandler.Reset();
+        LowPriorityOrderHandler.Reset();
+
+        await StartHostedServicesAsync(hostedServices);
+        try
+        {
+            await publisher.PublishAsync(new OrderCreated("high-1"));
+            await publisher.PublishAsync("orders.created.low", new OrderCreated("low-1"));
+
+            await HighPriorityOrderHandler.Received.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await LowPriorityOrderHandler.Received.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            Assert.Equal(["high-1"], HighPriorityOrderHandler.Messages.ToArray());
+            Assert.Equal(["low-1"], LowPriorityOrderHandler.Messages.ToArray());
+        }
+        finally
+        {
+            await StopHostedServicesAsync(hostedServices);
+        }
+    }
+
+    [Fact]
+    public async Task QueueBoundToMultipleRoutingKeys_DeliversAllMessagesToSameConsumer()
+    {
+        if (!_fixture.IsAvailable)
+        {
+            return;
+        }
+
+        var services = CreateServices();
+        services.AddRabbitPublisher<OrderCreated>("orders", "orders.created.eu");
+        services.AddRabbitSubscriber<OrderCreated>(
+            "orders.created.multi",
+            (message, _) =>
+            {
+                MultiRouteScenario.Messages.Enqueue(message.Body.OrderId);
+                if (MultiRouteScenario.Messages.Count == 2)
+                {
+                    MultiRouteScenario.Received.TrySetResult();
+                }
+
+                return Task.CompletedTask;
+            },
+            builder => builder.ErrorHandling.UseDiscard());
+
+        await using var provider = services.BuildServiceProvider();
+        var hostedServices = provider.GetServices<IHostedService>().ToArray();
+        var publisher = provider.GetRequiredService<IMessagePublisher<OrderCreated>>();
+        await PurgeQueuesAsync("orders.created.multi");
+        MultiRouteScenario.Reset();
+
+        await StartHostedServicesAsync(hostedServices);
+        try
+        {
+            await publisher.PublishAsync(new OrderCreated("eu-1"));
+            await publisher.PublishAsync("orders.created.us", new OrderCreated("us-1"));
+
+            await MultiRouteScenario.Received.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            Assert.Equal(["eu-1", "us-1"], MultiRouteScenario.Messages.ToArray());
+        }
+        finally
+        {
+            await StopHostedServicesAsync(hostedServices);
+        }
+    }
+
+    private ServiceCollection CreateServices()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance);
+        services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
+        services.AddSphereRabbitMq(options =>
+        {
+            options.HostName = "localhost";
+            options.Port = _fixture.AmqpPort;
+            options.UserName = "guest";
+            options.Password = "guest";
+            options.ValidateTopologyOnStartup = true;
+        });
+        return services;
+    }
+
+    private async Task PurgeQueuesAsync(params string[] queues)
+    {
+        await using var connection = await _fixture.CreateConnectionFactory().CreateConnectionAsync();
+        await using var channel = await connection.CreateChannelAsync();
+
+        foreach (var queue in queues)
+        {
+            await channel.QueuePurgeAsync(queue, CancellationToken.None);
+        }
+    }
+
+    private static async Task StartHostedServicesAsync(IEnumerable<IHostedService> hostedServices)
+    {
+        foreach (var hostedService in hostedServices)
+        {
+            await hostedService.StartAsync(CancellationToken.None);
+        }
+    }
+
+    private static async Task StopHostedServicesAsync(IEnumerable<IHostedService> hostedServices)
+    {
+        foreach (var hostedService in hostedServices.Reverse())
+        {
+            await hostedService.StopAsync(CancellationToken.None);
+        }
+    }
+
+    private sealed record OrderCreated(string OrderId);
+
+    private static class MinimalTypedScenario
+    {
+        public static TaskCompletionSource<string> Received { get; private set; } = CreateSource();
+
+        public static void Reset()
+        {
+            Received = CreateSource();
+        }
+
+        private static TaskCompletionSource<string> CreateSource()
+            => new(TaskCreationOptions.RunContinuationsAsynchronously);
+    }
+
+    private static class MultiRouteScenario
+    {
+        public static ConcurrentQueue<string> Messages { get; } = new();
+
+        public static TaskCompletionSource Received { get; private set; } = CreateSource();
+
+        public static void Reset()
+        {
+            while (Messages.TryDequeue(out _))
+            {
+            }
+
+            Received = CreateSource();
+        }
+
+        private static TaskCompletionSource CreateSource()
+            => new(TaskCreationOptions.RunContinuationsAsynchronously);
+    }
+
+    private sealed class HighPriorityOrderHandler : IRabbitSubscriberMessageHandler<OrderCreated>
+    {
+        public static ConcurrentQueue<string> Messages { get; } = new();
+
+        public static TaskCompletionSource Received { get; private set; } = CreateSource();
+
+        public Task HandleAsync(MessageEnvelope<OrderCreated> message, CancellationToken cancellationToken)
+        {
+            Messages.Enqueue(message.Body.OrderId);
+            Received.TrySetResult();
+            return Task.CompletedTask;
+        }
+
+        public static void Reset()
+        {
+            while (Messages.TryDequeue(out _))
+            {
+            }
+
+            Received = CreateSource();
+        }
+
+        private static TaskCompletionSource CreateSource()
+            => new(TaskCreationOptions.RunContinuationsAsynchronously);
+    }
+
+    private sealed class LowPriorityOrderHandler : IRabbitSubscriberMessageHandler<OrderCreated>
+    {
+        public static ConcurrentQueue<string> Messages { get; } = new();
+
+        public static TaskCompletionSource Received { get; private set; } = CreateSource();
+
+        public Task HandleAsync(MessageEnvelope<OrderCreated> message, CancellationToken cancellationToken)
+        {
+            Messages.Enqueue(message.Body.OrderId);
+            Received.TrySetResult();
+            return Task.CompletedTask;
+        }
+
+        public static void Reset()
+        {
+            while (Messages.TryDequeue(out _))
+            {
+            }
+
+            Received = CreateSource();
+        }
+
+        private static TaskCompletionSource CreateSource()
+            => new(TaskCreationOptions.RunContinuationsAsynchronously);
+    }
+}

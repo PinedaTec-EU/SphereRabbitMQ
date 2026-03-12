@@ -8,6 +8,7 @@ using SphereRabbitMQ.Application.Subscribers;
 using SphereRabbitMQ.Application.Retry;
 using SphereRabbitMQ.Application.Serialization;
 using SphereRabbitMQ.DependencyInjection.Subscribers;
+using SphereRabbitMQ.DependencyInjection.Publishing;
 using SphereRabbitMQ.Domain.Messaging;
 using SphereRabbitMQ.Infrastructure.RabbitMQ.Connection;
 using SphereRabbitMQ.Infrastructure.RabbitMQ.Migration;
@@ -65,6 +66,19 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
+    public static IServiceCollection AddRabbitSubscriber<TMessage, THandler>(
+        this IServiceCollection services,
+        string queueName,
+        Action<RabbitSubscriberRegistrationBuilder<TMessage>>? configure = null)
+        where THandler : class, IRabbitSubscriberMessageHandler<TMessage>
+    {
+        return services.AddRabbitSubscriber<TMessage, THandler>(builder =>
+        {
+            builder.FromQueue(queueName);
+            configure?.Invoke(builder);
+        });
+    }
+
     public static IServiceCollection AddRabbitSubscriber<TMessage>(
         this IServiceCollection services,
         Action<RabbitSubscriberRegistrationBuilder<TMessage>> configure,
@@ -77,5 +91,70 @@ public static class ServiceCollectionExtensions
                 builder.Handle(handler);
             }));
         return services;
+    }
+
+    public static IServiceCollection AddRabbitSubscriber<TMessage>(
+        this IServiceCollection services,
+        string queueName,
+        Func<MessageEnvelope<TMessage>, CancellationToken, Task> handler,
+        Action<RabbitSubscriberRegistrationBuilder<TMessage>>? configure = null)
+    {
+        return services.AddRabbitSubscriber(
+            builder =>
+            {
+                builder.FromQueue(queueName);
+                configure?.Invoke(builder);
+            },
+            handler);
+    }
+
+    public static IServiceCollection AddKeyedRabbitSubscriber<TMessage, THandler>(
+        this IServiceCollection services,
+        object serviceKey,
+        string queueName,
+        Action<RabbitSubscriberRegistrationBuilder<TMessage>>? configure = null)
+        where THandler : class, IRabbitSubscriberMessageHandler<TMessage>
+    {
+        ArgumentNullException.ThrowIfNull(serviceKey);
+
+        services.AddKeyedScoped<THandler>(serviceKey);
+        services.AddSingleton<IRabbitSubscriberRegistration>(_ =>
+        {
+            return new RabbitSubscriberRegistration<TMessage>(builder =>
+            {
+                builder.FromQueue(queueName);
+                configure?.Invoke(builder);
+                builder.UseHandler<THandler>(serviceKey);
+            });
+        });
+
+        return services;
+    }
+
+    public static IServiceCollection AddRabbitPublisher<TMessage>(
+        this IServiceCollection services,
+        Action<RabbitPublisherRegistrationBuilder<TMessage>> configure)
+    {
+        var builder = new RabbitPublisherRegistrationBuilder<TMessage>();
+        configure(builder);
+        builder.Validate();
+
+        services.AddSingleton<IMessagePublisher<TMessage>>(_ =>
+            new PreconfiguredMessagePublisher<TMessage>(
+                _.GetRequiredService<IRabbitMQPublisher>(),
+                builder.Exchange,
+                builder.RoutingKey));
+
+        return services;
+    }
+
+    public static IServiceCollection AddRabbitPublisher<TMessage>(
+        this IServiceCollection services,
+        string exchange,
+        string routingKey)
+    {
+        return services.AddRabbitPublisher<TMessage>(builder => builder
+            .ToExchange(exchange)
+            .WithRoutingKey(routingKey));
     }
 }

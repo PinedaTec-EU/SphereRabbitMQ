@@ -56,6 +56,9 @@ public sealed class RabbitSubscriberRegistrationBuilder<TMessage>
     }
 
     public RabbitSubscriberRegistrationBuilder<TMessage> UseHandler<THandler>() where THandler : class, IRabbitSubscriberMessageHandler<TMessage>
+        => UseHandler<THandler>(null);
+
+    public RabbitSubscriberRegistrationBuilder<TMessage> UseHandler<THandler>(object? serviceKey) where THandler : class, IRabbitSubscriberMessageHandler<TMessage>
     {
         _handlerFactory = serviceProvider =>
         {
@@ -63,7 +66,9 @@ public sealed class RabbitSubscriberRegistrationBuilder<TMessage>
             return async (message, cancellationToken) =>
             {
                 await using var scope = scopeFactory.CreateAsyncScope();
-                var handler = scope.ServiceProvider.GetRequiredService<THandler>();
+                var handler = serviceKey is null
+                    ? scope.ServiceProvider.GetRequiredService<THandler>()
+                    : scope.ServiceProvider.GetRequiredKeyedService<THandler>(serviceKey);
                 await handler.HandleAsync(message, cancellationToken);
             };
         };
@@ -76,7 +81,9 @@ public sealed class RabbitSubscriberRegistrationBuilder<TMessage>
                 return async (notification, cancellationToken) =>
                 {
                     await using var scope = scopeFactory.CreateAsyncScope();
-                    var handler = scope.ServiceProvider.GetRequiredService<THandler>();
+                    var handler = serviceKey is null
+                        ? scope.ServiceProvider.GetRequiredService<THandler>()
+                        : scope.ServiceProvider.GetRequiredKeyedService<THandler>(serviceKey);
                     if (handler is IRabbitSubscriberDeadLetterNotificationHandler<TMessage> deadLetterNotificationHandler)
                     {
                         await deadLetterNotificationHandler.OnDeadLetterAsync(notification, cancellationToken);
@@ -93,7 +100,9 @@ public sealed class RabbitSubscriberRegistrationBuilder<TMessage>
                 return async (context, cancellationToken) =>
                 {
                     await using var scope = scopeFactory.CreateAsyncScope();
-                    var handler = scope.ServiceProvider.GetRequiredService<THandler>();
+                    var handler = serviceKey is null
+                        ? scope.ServiceProvider.GetRequiredService<THandler>()
+                        : scope.ServiceProvider.GetRequiredKeyedService<THandler>(serviceKey);
                     return handler is IRabbitSubscriberComponentFailureHandler<TMessage> componentFailureHandler
                         ? await componentFailureHandler.OnComponentFailureAsync(context, cancellationToken)
                         : SubscriberComponentFailureHandlingResult.UseDefault;
