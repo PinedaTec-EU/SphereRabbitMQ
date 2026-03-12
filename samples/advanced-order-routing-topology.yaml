@@ -1,0 +1,128 @@
+broker:
+  managementUrl: http://localhost:31672/api/
+  username: admin
+  password: qwerty12345
+  virtualHosts:
+    - sales-routing
+
+metadata:
+  owner: platform
+  service: ordering
+  scenario: advanced-routing
+
+naming:
+  separator: "."
+  retryExchangeSuffix: "retry"
+  retryQueueSuffix: "retry"
+  deadLetterExchangeSuffix: "dlx"
+  deadLetterQueueSuffix: "dlq"
+  parkingLotQueueSuffix: "parking"
+
+virtualHosts:
+  - name: sales-routing
+    exchanges:
+      - name: orders
+        type: topic
+        durable: true
+      - name: warehouse.orders
+        type: topic
+        durable: true
+    queues:
+      - name: orders.created.inventory
+        type: quorum
+        durable: true
+        retry:
+          enabled: true
+          steps:
+            - name: fast
+              delay: "00:00:15"
+            - name: slow
+              delay: "00:02:00"
+        deadLetter:
+          enabled: true
+        metadata:
+          consumer: inventory
+          priority: normal
+
+      - name: orders.created.logistics.high
+        type: quorum
+        durable: true
+        retry:
+          enabled: true
+          steps:
+            - name: fast
+              delay: "00:00:10"
+        deadLetter:
+          enabled: true
+        metadata:
+          consumer: logistics
+          priority: high
+
+      - name: orders.created.logistics.low
+        type: classic
+        durable: true
+        ttl: "00:30:00"
+        deadLetter:
+          enabled: true
+        metadata:
+          consumer: logistics
+          priority: low
+
+      - name: orders.created.multi-region
+        type: quorum
+        durable: true
+        deadLetter:
+          enabled: true
+        metadata:
+          consumer: regional-processor
+          note: same queue bound to multiple routing keys
+
+      - name: warehouse.orders.created
+        type: quorum
+        durable: true
+        retry:
+          enabled: true
+          steps:
+            - name: fast
+              delay: "00:00:20"
+        deadLetter:
+          enabled: true
+        metadata:
+          consumer: warehouse
+          source: exchange-to-exchange
+
+    bindings:
+      - sourceExchange: orders
+        destination: orders.created.inventory
+        destinationType: queue
+        routingKey: "orders.created"
+
+      - sourceExchange: orders
+        destination: orders.created.logistics.high
+        destinationType: queue
+        routingKey: "orders.created.high"
+
+      - sourceExchange: orders
+        destination: orders.created.logistics.low
+        destinationType: queue
+        routingKey: "orders.created.low"
+
+      - sourceExchange: orders
+        destination: orders.created.multi-region
+        destinationType: queue
+        routingKey: "orders.created.eu"
+
+      - sourceExchange: orders
+        destination: orders.created.multi-region
+        destinationType: queue
+        routingKey: "orders.created.us"
+
+      - sourceExchange: orders
+        destination: warehouse.orders
+        destinationType: exchange
+        routingKey: "orders.created"
+
+      - sourceExchange: warehouse.orders
+        destination: warehouse.orders.created
+        destinationType: queue
+        routingKey: "orders.created"

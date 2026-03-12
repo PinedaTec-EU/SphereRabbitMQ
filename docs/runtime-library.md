@@ -81,16 +81,24 @@ services.AddSphereRabbitMq(options =>
     options.Password = "guest";
 });
 
-await using var provider = services.BuildServiceProvider();
-var publisher = provider.GetRequiredService<IRabbitMQPublisher>();
+services.AddRabbitPublisher<OrderCreated>(config =>
+{
+    config
+        .ToExchange("orders")
+        .WithRoutingKey("orders.created");
+});
 
-await publisher.PublishAsync(
-    exchange: "orders",
-    routingKey: "orders.created",
-    message: new OrderCreated("order-42"));
+await using var provider = services.BuildServiceProvider();
+var publisher = provider.GetRequiredService<IMessagePublisher<OrderCreated>>();
+
+await publisher.PublishAsync(new OrderCreated("order-42"));
 
 public sealed record OrderCreated(string OrderId);
 ```
+
+`IRabbitMQPublisher` remains available as the low-level API for dynamic or infrastructure-heavy scenarios. The recommended application-facing API is `IMessagePublisher<TMessage>`.
+
+If a flow needs to publish the same message type to a different broker route, `IMessagePublisher<TMessage>` also supports an explicit routing-key overload while keeping the configured exchange fixed.
 
 ## Subscriber Example
 
@@ -109,16 +117,16 @@ services.AddSphereRabbitMq(options =>
     options.ValidateTopologyOnStartup = true;
 });
 
-services.AddRabbitSubscriber<OrderCreated, OrderCreatedSubscriber>(config =>
-{
-    config
-        .FromQueue("orders.created")
-        .WithPrefetchCount(10)
-        .WithMaxConcurrency(4)
-        .UseHandler<OrderCreatedSubscriber>();
+services.AddRabbitSubscriber<OrderCreated, OrderCreatedSubscriber>(
+    "orders.created",
+    config =>
+    {
+        config
+            .WithPrefetchCount(10)
+            .WithMaxConcurrency(4);
 
-    config.ErrorHandling.UseRetryAndDeadLetter(5);
-});
+        config.ErrorHandling.UseRetryAndDeadLetter(5);
+    });
 ```
 
 ```csharp
@@ -135,6 +143,10 @@ public sealed class OrderCreatedSubscriber : IRabbitSubscriberMessageHandler<Ord
     }
 }
 ```
+
+`IRabbitMQSubscriber` remains available as the low-level API for dynamic or infrastructure-heavy scenarios. The recommended application-facing API is `AddRabbitSubscriber<TMessage, THandler>(...)` with a preconfigured queue and policy.
+
+For advanced scenarios, the library also supports keyed subscribers so the same message type can be handled by multiple independently configured consumers in the same application.
 
 ## Error Handling Semantics
 
@@ -188,6 +200,16 @@ When dead-letter is configured for a subscriber, the runtime expects:
 - dead-letter queue exists
 
 If any of those are missing, `SubscribeAsync` fails explicitly.
+
+## Routing Notes
+
+With RabbitMQ `direct` and `topic` exchanges, broker routing is driven by the publish routing key, not by arbitrary message headers.
+
+That means:
+
+- use the configured publisher route by default, or override the routing key explicitly when a flow needs a different broker route
+- use message headers for metadata and processing context
+- use a `headers` exchange in topology only when broker-side header routing is explicitly desired
 
 ## Example Failure Flow
 
