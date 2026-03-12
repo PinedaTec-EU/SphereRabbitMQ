@@ -182,7 +182,7 @@ public sealed class RabbitMqRuntimeIntegrationTests
                 MaxConcurrency = 1,
                 ErrorHandling = new SubscriberErrorHandlingSettings
                 {
-                    Strategy = SubscriberErrorStrategyKind.RetryOnly,
+                    Strategy = SubscriberErrorStrategyKind.RetryThenDeadLetter,
                     MaxRetryAttempts = 1,
                 },
                 Handler = (message, _) =>
@@ -450,7 +450,7 @@ public sealed class RabbitMqRuntimeIntegrationTests
                 QueueName = "orders.created",
                 ErrorHandling = new SubscriberErrorHandlingSettings
                 {
-                    Strategy = SubscriberErrorStrategyKind.RetryOnly,
+                    Strategy = SubscriberErrorStrategyKind.RetryThenDeadLetter,
                     RetryRoute = new RetryRouteDefinition("orders.created.retry.missing", "orders.created.retry.step1", "orders.created.retry.step1"),
                 },
                 Handler = (_, _) => Task.CompletedTask,
@@ -477,7 +477,7 @@ public sealed class RabbitMqRuntimeIntegrationTests
                 QueueName = "orders.created",
                 ErrorHandling = new SubscriberErrorHandlingSettings
                 {
-                    Strategy = SubscriberErrorStrategyKind.RetryOnly,
+                    Strategy = SubscriberErrorStrategyKind.RetryThenDeadLetter,
                     RetryRoute = new RetryRouteDefinition("orders.created.retry", "orders.created.retry.step1", "orders.created.retry.step1.missing"),
                 },
                 Handler = (_, _) => Task.CompletedTask,
@@ -772,7 +772,7 @@ public sealed class RabbitMqRuntimeIntegrationTests
                     MaxConcurrency = 1,
                     ErrorHandling = new SubscriberErrorHandlingSettings
                     {
-                        Strategy = SubscriberErrorStrategyKind.RetryOnly,
+                        Strategy = SubscriberErrorStrategyKind.RetryThenDeadLetter,
                         MaxRetryAttempts = 1,
                     },
                     Handler = async (_, cancellationToken) =>
@@ -853,65 +853,6 @@ public sealed class RabbitMqRuntimeIntegrationTests
         }
 
         Assert.Equal(1u, await CountMessagesAsync("orders.created"));
-        Assert.Equal(0u, await CountMessagesAsync("orders.created.dlq"));
-    }
-
-    [Fact]
-    public async Task RetryOnlyAsync_DoesNotNotify_WhenRetriesAreExhaustedWithoutDeadLetter()
-    {
-        if (!_fixture.IsAvailable)
-        {
-            return;
-        }
-
-        var services = CreateServices();
-        await using var provider = services.BuildServiceProvider();
-        var publisher = provider.GetRequiredService<IRabbitMQPublisher>();
-        var subscriber = provider.GetRequiredService<IRabbitMQSubscriber>();
-        await PurgeQueuesAsync("orders.created", "orders.created.retry.step1", "orders.created.dlq");
-        var attempts = 0;
-        var processed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var notificationCount = 0;
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-
-        var subscription = Task.Run(() => subscriber.SubscribeAsync(
-            new SubscriberDefinition<OrderCreated>
-            {
-                QueueName = "orders.created",
-                PrefetchCount = 1,
-                MaxConcurrency = 1,
-                ErrorHandling = new SubscriberErrorHandlingSettings
-                {
-                    Strategy = SubscriberErrorStrategyKind.RetryOnly,
-                    MaxRetryAttempts = 1,
-                },
-                Handler = (_, _) =>
-                {
-                    attempts++;
-                    if (attempts == 2)
-                    {
-                        processed.TrySetResult();
-                    }
-
-                    throw new InvalidOperationException("retry then discard");
-                },
-                DeadLetterNotificationHandler = (_, _) =>
-                {
-                    notificationCount++;
-                    return Task.CompletedTask;
-                },
-            },
-            cts.Token));
-
-        await publisher.PublishAsync("orders", "orders.created", new OrderCreated("order-retry-only"));
-        await processed.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        await Task.Delay(750);
-        cts.Cancel();
-        await IgnoreCancellationAsync(subscription);
-
-        Assert.Equal(2, attempts);
-        Assert.Equal(0, notificationCount);
-        Assert.Equal(0u, await CountMessagesAsync("orders.created.retry.step1"));
         Assert.Equal(0u, await CountMessagesAsync("orders.created.dlq"));
     }
 
@@ -1093,10 +1034,7 @@ public sealed class RabbitMqRuntimeIntegrationTests
         services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
         services.AddSphereRabbitMq(options =>
         {
-            options.HostName = "localhost";
-            options.Port = _fixture.AmqpPort;
-            options.UserName = "guest";
-            options.Password = "guest";
+            options.SetConnectionString(_fixture.CreateConnectionString());
             options.ValidateTopologyOnStartup = false;
         });
 

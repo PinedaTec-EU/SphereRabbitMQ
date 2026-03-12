@@ -41,7 +41,7 @@ internal sealed class DefaultSubscriberTopologyExpectationProvider : ISubscriber
         ISet<string> exchanges,
         ISet<string> queues)
     {
-        if (definition.ErrorHandling.Strategy is SubscriberErrorStrategyKind.RetryOnly or SubscriberErrorStrategyKind.RetryThenDeadLetter)
+        if (definition.ErrorHandling.Strategy is SubscriberErrorStrategyKind.RetryThenDeadLetter)
         {
             var retryRoute = definition.ErrorHandling.RetryRoute ?? _subscriberInfrastructureRouteResolver.ResolveRetryRoute(definition.QueueName);
             exchanges.Add(retryRoute.Exchange);

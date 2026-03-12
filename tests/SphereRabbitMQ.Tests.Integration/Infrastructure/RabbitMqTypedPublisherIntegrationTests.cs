@@ -10,6 +10,9 @@ namespace SphereRabbitMQ.Tests.Integration.Infrastructure;
 [Collection(RabbitMqIntegrationCollection.CollectionName)]
 public sealed class RabbitMqTypedPublisherIntegrationTests
 {
+    private const string PublisherExchangeName = "orders";
+    private const string OrderCreatedRoutingKey = "orders.created";
+
     private readonly RabbitMqDockerFixture _fixture;
 
     public RabbitMqTypedPublisherIntegrationTests(RabbitMqDockerFixture fixture)
@@ -30,16 +33,13 @@ public sealed class RabbitMqTypedPublisherIntegrationTests
         services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
         services.AddSphereRabbitMq(options =>
         {
-            options.HostName = "localhost";
-            options.Port = _fixture.AmqpPort;
-            options.UserName = "guest";
-            options.Password = "guest";
+            options.SetConnectionString(_fixture.CreateConnectionString());
         });
         services.AddRabbitPublisher<OrderCreated>(config =>
         {
             config
-                .ToExchange("orders")
-                .WithRoutingKey("orders.created");
+                .ToExchange(PublisherExchangeName)
+                .WithRoutingKey(OrderCreatedRoutingKey);
         });
 
         await using var provider = services.BuildServiceProvider();

@@ -484,7 +484,7 @@ public sealed class RabbitMqSubscriber : IRabbitMQSubscriber
     }
 
     private RetryRouteDefinition? ResolveRetryRoute(string queueName, SubscriberErrorStrategyKind strategy)
-        => strategy is SubscriberErrorStrategyKind.RetryOnly or SubscriberErrorStrategyKind.RetryThenDeadLetter
+        => strategy is SubscriberErrorStrategyKind.RetryThenDeadLetter
             ? _subscriberInfrastructureRouteResolver.ResolveRetryRoute(queueName)
             : null;
 

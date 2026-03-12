@@ -27,7 +27,7 @@ public sealed class DefaultRetryPolicyResolver : IRetryPolicyResolver
         }
 
         var nextRetryCount = metadata.RetryCount + 1;
-        var shouldRetry = settings.Strategy is SubscriberErrorStrategyKind.RetryOnly or SubscriberErrorStrategyKind.RetryThenDeadLetter
+        var shouldRetry = settings.Strategy is SubscriberErrorStrategyKind.RetryThenDeadLetter
             && settings.RetryRoute is not null
             && nextRetryCount <= settings.MaxRetryAttempts;
 

@@ -29,7 +29,7 @@ public sealed class DefaultRetryPolicyResolverTests
         var resolver = new DefaultRetryPolicyResolver();
         var settings = new SubscriberErrorHandlingSettings
         {
-            Strategy = SubscriberErrorStrategyKind.RetryOnly,
+            Strategy = SubscriberErrorStrategyKind.RetryThenDeadLetter,
             MaxRetryAttempts = 5,
             RetryRoute = new RetryRouteDefinition("orders.retry", "orders.created.retry"),
             NonRetriableExceptions = [typeof(ArgumentException)],
@@ -47,7 +47,7 @@ public sealed class DefaultRetryPolicyResolverTests
         var resolver = new DefaultRetryPolicyResolver();
         var settings = new SubscriberErrorHandlingSettings
         {
-            Strategy = SubscriberErrorStrategyKind.RetryOnly,
+            Strategy = SubscriberErrorStrategyKind.RetryThenDeadLetter,
             MaxRetryAttempts = 5,
             RetryRoute = new RetryRouteDefinition("orders.retry", "orders.created.retry"),
         };
@@ -64,7 +64,7 @@ public sealed class DefaultRetryPolicyResolverTests
         var resolver = new DefaultRetryPolicyResolver();
         var settings = new SubscriberErrorHandlingSettings
         {
-            Strategy = SubscriberErrorStrategyKind.RetryOnly,
+            Strategy = SubscriberErrorStrategyKind.RetryThenDeadLetter,
             MaxRetryAttempts = 5,
             RetryRoute = new RetryRouteDefinition("orders.retry", "orders.created.retry"),
         };
@@ -81,7 +81,7 @@ public sealed class DefaultRetryPolicyResolverTests
         var resolver = new DefaultRetryPolicyResolver();
         var settings = new SubscriberErrorHandlingSettings
         {
-            Strategy = SubscriberErrorStrategyKind.RetryOnly,
+            Strategy = SubscriberErrorStrategyKind.RetryThenDeadLetter,
             MaxRetryAttempts = 5,
             RetryRoute = null,
         };

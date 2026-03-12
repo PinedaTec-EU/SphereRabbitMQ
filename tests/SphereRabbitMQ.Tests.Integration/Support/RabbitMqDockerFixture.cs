@@ -6,6 +6,11 @@ namespace SphereRabbitMQ.Tests.Integration.Support;
 
 public sealed class RabbitMqDockerFixture : IAsyncLifetime
 {
+    private const string DefaultHostName = "localhost";
+    private const string DefaultPassword = "guest";
+    private const string DefaultUserName = "guest";
+    private const string DefaultVirtualHost = "/";
+
     private readonly string _containerName = $"sphere-rabbitmq-tests-{Guid.NewGuid():N}";
 
     public int AmqpPort { get; private set; }
@@ -81,15 +86,18 @@ public sealed class RabbitMqDockerFixture : IAsyncLifetime
     public ConnectionFactory CreateConnectionFactory()
         => new()
         {
-            HostName = "localhost",
+            HostName = DefaultHostName,
             Port = AmqpPort,
-            UserName = "guest",
-            Password = "guest",
-            VirtualHost = "/",
+            UserName = DefaultUserName,
+            Password = DefaultPassword,
+            VirtualHost = DefaultVirtualHost,
             AutomaticRecoveryEnabled = true,
             TopologyRecoveryEnabled = false,
             ConsumerDispatchConcurrency = 1,
         };
+
+    public string CreateConnectionString()
+        => $"amqp://{DefaultUserName}:{DefaultPassword}@{DefaultHostName}:{AmqpPort}/{Uri.EscapeDataString(DefaultVirtualHost)}";
 
     private async Task<bool> WaitForBrokerAsync()
     {

@@ -16,6 +16,22 @@ namespace SphereRabbitMQ.Tests.Unit.Infrastructure;
 public sealed class RabbitMqConnectionProviderAndChannelPoolTests
 {
     [Fact]
+    public void SetConnectionString_ParsesCoreConnectionSettings()
+    {
+        const string connectionString = "amqp://app-user:app-password@rabbitmq.internal:5679/app-vhost";
+        var options = new SphereRabbitMqOptions();
+
+        options.SetConnectionString(connectionString);
+
+        Assert.Equal(connectionString, options.ConnectionString);
+        Assert.Equal("rabbitmq.internal", options.HostName);
+        Assert.Equal(5679, options.Port);
+        Assert.Equal("app-vhost", options.VirtualHost);
+        Assert.Equal("app-user", options.UserName);
+        Assert.Equal("app-password", options.Password);
+    }
+
+    [Fact]
     public async Task GetConnectionAsync_ReturnsSameOpenConnection_ForConcurrentCalls()
     {
         var connectionMock = new Mock<IConnection>(MockBehavior.Strict);

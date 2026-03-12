@@ -14,6 +14,15 @@ namespace SphereRabbitMQ.Tests.Integration.Infrastructure;
 [Collection(RabbitMqIntegrationCollection.CollectionName)]
 public sealed class RabbitMqAdvancedConfigurationIntegrationTests
 {
+    private const string DefaultPublisherExchangeName = "orders";
+    private const string DefaultOrderCreatedRoutingKey = "orders.created";
+    private const string HighPriorityRoutingKey = "orders.created.high";
+    private const string LowPriorityRoutingKey = "orders.created.low";
+    private const string MultiRegionEuRoutingKey = "orders.created.eu";
+    private const string MultiRegionUsRoutingKey = "orders.created.us";
+    private const string OrderCreatedQueueName = "orders.created";
+    private const string MultiRouteQueueName = "orders.created.multi";
+
     private readonly RabbitMqDockerFixture _fixture;
 
     public RabbitMqAdvancedConfigurationIntegrationTests(RabbitMqDockerFixture fixture)
@@ -30,9 +39,9 @@ public sealed class RabbitMqAdvancedConfigurationIntegrationTests
         }
 
         var services = CreateServices();
-        services.AddRabbitPublisher<OrderCreated>("orders", "orders.created");
+        services.AddRabbitPublisher<OrderCreated>(DefaultPublisherExchangeName, DefaultOrderCreatedRoutingKey);
         services.AddRabbitSubscriber<OrderCreated>(
-            "orders.created",
+            OrderCreatedQueueName,
             (message, _) =>
             {
                 MinimalTypedScenario.Received.TrySetResult(message.Body.OrderId);
@@ -69,14 +78,14 @@ public sealed class RabbitMqAdvancedConfigurationIntegrationTests
         }
 
         var services = CreateServices();
-        services.AddRabbitPublisher<OrderCreated>("orders", "orders.created.high");
+        services.AddRabbitPublisher<OrderCreated>(DefaultPublisherExchangeName, HighPriorityRoutingKey);
         services.AddKeyedRabbitSubscriber<OrderCreated, HighPriorityOrderHandler>(
             "high",
-            "orders.created.high",
+            HighPriorityRoutingKey,
             builder => builder.ErrorHandling.UseDiscard());
         services.AddKeyedRabbitSubscriber<OrderCreated, LowPriorityOrderHandler>(
             "low",
-            "orders.created.low",
+            LowPriorityRoutingKey,
             builder => builder.ErrorHandling.UseDiscard());
 
         await using var provider = services.BuildServiceProvider();
@@ -90,7 +99,7 @@ public sealed class RabbitMqAdvancedConfigurationIntegrationTests
         try
         {
             await publisher.PublishAsync(new OrderCreated("high-1"));
-            await publisher.PublishAsync("orders.created.low", new OrderCreated("low-1"));
+            await publisher.PublishAsync(LowPriorityRoutingKey, new OrderCreated("low-1"));
 
             await HighPriorityOrderHandler.Received.Task.WaitAsync(TimeSpan.FromSeconds(5));
             await LowPriorityOrderHandler.Received.Task.WaitAsync(TimeSpan.FromSeconds(5));
@@ -113,9 +122,9 @@ public sealed class RabbitMqAdvancedConfigurationIntegrationTests
         }
 
         var services = CreateServices();
-        services.AddRabbitPublisher<OrderCreated>("orders", "orders.created.eu");
+        services.AddRabbitPublisher<OrderCreated>(DefaultPublisherExchangeName, MultiRegionEuRoutingKey);
         services.AddRabbitSubscriber<OrderCreated>(
-            "orders.created.multi",
+            MultiRouteQueueName,
             (message, _) =>
             {
                 MultiRouteScenario.Messages.Enqueue(message.Body.OrderId);
@@ -138,7 +147,7 @@ public sealed class RabbitMqAdvancedConfigurationIntegrationTests
         try
         {
             await publisher.PublishAsync(new OrderCreated("eu-1"));
-            await publisher.PublishAsync("orders.created.us", new OrderCreated("us-1"));
+            await publisher.PublishAsync(MultiRegionUsRoutingKey, new OrderCreated("us-1"));
 
             await MultiRouteScenario.Received.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
@@ -157,10 +166,7 @@ public sealed class RabbitMqAdvancedConfigurationIntegrationTests
         services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
         services.AddSphereRabbitMq(options =>
         {
-            options.HostName = "localhost";
-            options.Port = _fixture.AmqpPort;
-            options.UserName = "guest";
-            options.Password = "guest";
+            options.SetConnectionString(_fixture.CreateConnectionString());
             options.ValidateTopologyOnStartup = true;
         });
         return services;

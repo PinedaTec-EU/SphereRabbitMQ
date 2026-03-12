@@ -4,9 +4,7 @@ namespace SphereRabbitMQ.DependencyInjection.Subscribers;
 
 public sealed class RabbitSubscriberErrorHandlingBuilder
 {
-    private bool _enableRetry;
-
-    private bool _enableDeadLetter = true;
+    private SubscriberErrorStrategyKind _strategy = SubscriberErrorStrategyKind.DeadLetterOnly;
 
     public int MaxRetryAttempts { get; set; } = 3;
 
@@ -14,59 +12,28 @@ public sealed class RabbitSubscriberErrorHandlingBuilder
 
     public RabbitSubscriberErrorHandlingBuilder UseRetryAndDeadLetter(int maxRetryAttempts = 3)
     {
-        _enableRetry = true;
-        _enableDeadLetter = true;
-        MaxRetryAttempts = maxRetryAttempts;
-        return this;
-    }
-
-    public RabbitSubscriberErrorHandlingBuilder UseRetryOnly(int maxRetryAttempts = 3)
-    {
-        _enableRetry = true;
-        _enableDeadLetter = false;
+        _strategy = SubscriberErrorStrategyKind.RetryThenDeadLetter;
         MaxRetryAttempts = maxRetryAttempts;
         return this;
     }
 
     public RabbitSubscriberErrorHandlingBuilder UseDeadLetterOnly()
     {
-        _enableRetry = false;
-        _enableDeadLetter = true;
+        _strategy = SubscriberErrorStrategyKind.DeadLetterOnly;
         return this;
     }
 
     public RabbitSubscriberErrorHandlingBuilder UseDiscard()
     {
-        _enableRetry = false;
-        _enableDeadLetter = false;
+        _strategy = SubscriberErrorStrategyKind.Discard;
         return this;
     }
 
     internal SubscriberErrorHandlingSettings Build()
         => new()
         {
-            Strategy = ResolveStrategy(),
+            Strategy = _strategy,
             MaxRetryAttempts = MaxRetryAttempts,
             NonRetriableExceptions = NonRetriableExceptions.ToArray(),
         };
-
-    private SubscriberErrorStrategyKind ResolveStrategy()
-    {
-        if (_enableRetry && _enableDeadLetter)
-        {
-            return SubscriberErrorStrategyKind.RetryThenDeadLetter;
-        }
-
-        if (_enableRetry)
-        {
-            return SubscriberErrorStrategyKind.RetryOnly;
-        }
-
-        if (_enableDeadLetter)
-        {
-            return SubscriberErrorStrategyKind.DeadLetterOnly;
-        }
-
-        return SubscriberErrorStrategyKind.Discard;
-    }
 }

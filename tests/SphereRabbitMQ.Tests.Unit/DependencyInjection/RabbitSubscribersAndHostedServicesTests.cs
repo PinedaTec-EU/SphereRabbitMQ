@@ -19,40 +19,33 @@ namespace SphereRabbitMQ.Tests.Unit.DependencyInjection;
 
 public sealed class RabbitSubscriberErrorHandlingBuilderTests
 {
+    private const int ConfiguredMaxRetryAttempts = 7;
+
     [Fact]
     public void Build_ReturnsRetryThenDeadLetter_WhenRetryAndDeadLetterAreEnabled()
     {
         var builder = new RabbitSubscriberErrorHandlingBuilder()
-            .UseRetryAndDeadLetter(7);
+            .UseRetryAndDeadLetter(maxRetryAttempts: ConfiguredMaxRetryAttempts);
 
         builder.NonRetriableExceptions.Add(typeof(InvalidOperationException));
 
         var settings = builder.Build();
 
         Assert.Equal(SubscriberErrorStrategyKind.RetryThenDeadLetter, settings.Strategy);
-        Assert.Equal(7, settings.MaxRetryAttempts);
+        Assert.Equal(ConfiguredMaxRetryAttempts, settings.MaxRetryAttempts);
         Assert.Null(settings.RetryRoute);
         Assert.Null(settings.DeadLetterRoute);
         Assert.Contains(typeof(InvalidOperationException), settings.NonRetriableExceptions);
     }
 
     [Theory]
-    [InlineData(true, false, SubscriberErrorStrategyKind.RetryOnly)]
-    [InlineData(false, true, SubscriberErrorStrategyKind.DeadLetterOnly)]
-    [InlineData(false, false, SubscriberErrorStrategyKind.Discard)]
-    public void Build_ResolvesExpectedStrategy(bool enableRetry, bool enableDeadLetter, SubscriberErrorStrategyKind expected)
+    [InlineData(true, SubscriberErrorStrategyKind.DeadLetterOnly)]
+    [InlineData(false, SubscriberErrorStrategyKind.Discard)]
+    public void Build_ResolvesExpectedStrategy(bool enableDeadLetter, SubscriberErrorStrategyKind expected)
     {
         var builder = new RabbitSubscriberErrorHandlingBuilder();
 
-        if (enableRetry && enableDeadLetter)
-        {
-            builder.UseRetryAndDeadLetter();
-        }
-        else if (enableRetry)
-        {
-            builder.UseRetryOnly();
-        }
-        else if (enableDeadLetter)
+        if (enableDeadLetter)
         {
             builder.UseDeadLetterOnly();
         }

@@ -39,18 +39,7 @@ public sealed class RabbitMqConnectionProvider : IAsyncDisposable
 
             _connection?.Dispose();
 
-            var factory = new ConnectionFactory
-            {
-                HostName = _options.HostName,
-                Port = _options.Port,
-                UserName = _options.UserName,
-                Password = _options.Password,
-                VirtualHost = _options.VirtualHost,
-                ClientProvidedName = _options.ClientProvidedName,
-                AutomaticRecoveryEnabled = true,
-                TopologyRecoveryEnabled = false,
-                ConsumerDispatchConcurrency = 1,
-            };
+            var factory = CreateConnectionFactory();
 
             _connection = await factory.CreateConnectionAsync(cancellationToken);
             _logger.LogInformation("RabbitMQ connection established to {HostName}:{Port}/{VirtualHost}.", _options.HostName, _options.Port, _options.VirtualHost);
@@ -67,5 +56,32 @@ public sealed class RabbitMqConnectionProvider : IAsyncDisposable
         _connection?.Dispose();
         _sync.Dispose();
         return ValueTask.CompletedTask;
+    }
+
+    private ConnectionFactory CreateConnectionFactory()
+    {
+        var factory = new ConnectionFactory
+        {
+            ClientProvidedName = _options.ClientProvidedName,
+            AutomaticRecoveryEnabled = true,
+            TopologyRecoveryEnabled = false,
+            ConsumerDispatchConcurrency = 1,
+        };
+
+        if (!string.IsNullOrWhiteSpace(_options.ConnectionString))
+        {
+            factory.Uri = new Uri(_options.ConnectionString, UriKind.Absolute);
+        }
+        else
+        {
+            factory.HostName = _options.HostName;
+            factory.Port = _options.Port;
+            factory.UserName = _options.UserName;
+            factory.Password = _options.Password;
+            factory.VirtualHost = _options.VirtualHost;
+        }
+
+        factory.ClientProvidedName = _options.ClientProvidedName;
+        return factory;
     }
 }

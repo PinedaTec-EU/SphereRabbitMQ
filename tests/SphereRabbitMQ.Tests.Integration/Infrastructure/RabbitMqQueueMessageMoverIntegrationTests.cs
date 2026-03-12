@@ -32,10 +32,7 @@ public sealed class RabbitMqQueueMessageMoverIntegrationTests
         services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
         services.AddSphereRabbitMq(options =>
         {
-            options.HostName = "localhost";
-            options.Port = _fixture.AmqpPort;
-            options.UserName = "guest";
-            options.Password = "guest";
+            options.SetConnectionString(_fixture.CreateConnectionString());
             options.ValidateTopologyOnStartup = false;
         });
 
