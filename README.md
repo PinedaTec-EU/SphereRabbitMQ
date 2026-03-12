@@ -79,7 +79,7 @@ If any expected topology is missing, the runtime fails explicitly with a diagnos
 
 ## Runtime Error Model
 
-Consumer handlers may fail in three distinct ways:
+Subscriber handlers may fail in three distinct ways:
 
 - retryable failure: the message is forwarded to retry topology
 - non-retryable failure: the message skips retries and goes to DLQ if configured
@@ -90,7 +90,7 @@ Built-in exception semantics:
 - `NonRetriableMessageException`: never retried
 - `DiscardMessageException`: never retried and never dead-lettered
 
-Additional non-retryable exception types can be configured per consumer through settings.
+Additional non-retryable exception types can be configured per subscriber through settings.
 
 ## Migration Safety
 

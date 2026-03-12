@@ -18,7 +18,7 @@ If the required broker topology is missing, startup or message processing fails 
 ## What The Runtime Does
 
 - manage one shared RabbitMQ connection
-- use dedicated channels for consumers
+- use dedicated channels for subscribers
 - use a dedicated publisher channel strategy safe for confirms
 - publish messages with headers, correlation id, message id, and timestamp
 - consume messages with bounded concurrency and manual acknowledgements
@@ -57,10 +57,10 @@ Layers:
 Threading and broker usage are intentionally conservative:
 
 - one shared connection
-- one dedicated channel per consumer
+- one dedicated channel per subscriber
 - one dedicated serialized publisher channel strategy
-- broker prefetch is separate from local consumer concurrency
-- acknowledgements are coordinated safely on the consumer channel
+- broker prefetch is separate from local subscriber concurrency
+- acknowledgements are coordinated safely on the subscriber channel
 
 This avoids unsafe channel sharing between concurrent operations.
 
@@ -82,7 +82,7 @@ services.AddSphereRabbitMq(options =>
 });
 
 await using var provider = services.BuildServiceProvider();
-var publisher = provider.GetRequiredService<IPublisher>();
+var publisher = provider.GetRequiredService<IRabbitMQPublisher>();
 
 await publisher.PublishAsync(
     exchange: "orders",
@@ -92,7 +92,7 @@ await publisher.PublishAsync(
 public sealed record OrderCreated(string OrderId);
 ```
 
-## Consumer Example
+## Subscriber Example
 
 ```csharp
 using Microsoft.Extensions.DependencyInjection;
@@ -107,35 +107,27 @@ services.AddSphereRabbitMq(options =>
     options.UserName = "guest";
     options.Password = "guest";
     options.ValidateTopologyOnStartup = true;
-    options.ExpectedTopology = new(
-        Exchanges: ["orders", "orders.retry", "orders.dlx"],
-        Queues: ["orders.created", "orders.created.retry", "orders.created.dlq"]);
 });
 
-services.AddRabbitConsumer<OrderCreated, OrderCreatedConsumer>(config =>
+services.AddRabbitSubscriber<OrderCreated, OrderCreatedSubscriber>(config =>
 {
-    config.Queue = "orders.created";
-    config.Prefetch = 10;
-    config.MaxConcurrency = 4;
-    config.ErrorHandling.EnableRetry = true;
-    config.ErrorHandling.MaxRetryAttempts = 5;
-    config.ErrorHandling.RetryExchange = "orders.retry";
-    config.ErrorHandling.RetryRoutingKey = "orders.created.retry";
-    config.ErrorHandling.RetryQueue = "orders.created.retry";
-    config.ErrorHandling.EnableDeadLetter = true;
-    config.ErrorHandling.DeadLetterExchange = "orders.dlx";
-    config.ErrorHandling.DeadLetterRoutingKey = "orders.created.dlq";
-    config.ErrorHandling.DeadLetterQueue = "orders.created.dlq";
+    config
+        .FromQueue("orders.created")
+        .WithPrefetchCount(10)
+        .WithMaxConcurrency(4)
+        .UseHandler<OrderCreatedSubscriber>();
+
+    config.ErrorHandling.UseRetryAndDeadLetter(5);
 });
 ```
 
 ```csharp
-using SphereRabbitMQ.Abstractions.Consumers;
+using SphereRabbitMQ.Abstractions.Subscribers;
 using SphereRabbitMQ.Domain.Messaging;
 
 public sealed record OrderCreated(string OrderId);
 
-public sealed class OrderCreatedConsumer : IRabbitMessageHandler<OrderCreated>
+public sealed class OrderCreatedSubscriber : IRabbitSubscriberMessageHandler<OrderCreated>
 {
     public Task HandleAsync(MessageEnvelope<OrderCreated> message, CancellationToken cancellationToken)
     {
@@ -185,12 +177,12 @@ config.ErrorHandling.NonRetriableExceptions.Add(typeof(DomainRuleViolationExcept
 
 Broker-based retry only works if the topology already exists.
 
-When retry is configured for a consumer, the runtime expects:
+When retry is configured for a subscriber, the runtime expects:
 
 - retry exchange exists
 - retry queue exists
 
-When dead-letter is configured for a consumer, the runtime expects:
+When dead-letter is configured for a subscriber, the runtime expects:
 
 - dead-letter exchange exists
 - dead-letter queue exists
@@ -204,12 +196,12 @@ A common flow looks like this:
 1. Message arrives on `orders.created`.
 2. Handler throws `InvalidOperationException`.
 3. Retry policy says it is retryable.
-4. Runtime republishes to `orders.retry` / `orders.created.retry`.
+4. Runtime republishes to `orders.created.retry` / `orders.created.retry.step1`.
 5. Broker TTL queue waits.
 6. Broker dead-letters the message back to the main route.
 7. Handler fails again.
 8. Retry limit is exhausted.
-9. Runtime forwards to `orders.dlx` / `orders.created.dlq`.
+9. Runtime forwards to `orders.created.dlx` / `orders.created.dlq`.
 10. Original delivery is acked after the forward succeeds.
 
 ## Topology Validation
@@ -220,13 +212,19 @@ Startup validation is optional but recommended.
 services.AddSphereRabbitMq(options =>
 {
     options.ValidateTopologyOnStartup = true;
-    options.ExpectedTopology = new(
-        Exchanges: ["orders", "orders.retry", "orders.dlx"],
-        Queues: ["orders.created", "orders.created.retry", "orders.created.dlq"]);
 });
 ```
 
+When enabled, the runtime derives the expected subscriber topology automatically from:
+
+- the registered subscribers
+- each subscriber queue name
+- each subscriber error-handling policy
+- the built-in naming conventions for retry and dead-letter artifacts
+
 This validation is read-only. It does not declare anything.
+
+If an application needs to inspect the derived internal names, it can resolve `ISubscriberInfrastructureRouteResolver` from DI and query them explicitly. Those names are discoverable, but not configurable through the public subscriber API.
 
 ## Internal Message Moving
 
@@ -241,7 +239,7 @@ Integration tests cover:
 - publish and consume against a real RabbitMQ broker
 - broker-based retry
 - dead-letter forwarding
-- bounded consumer concurrency
+- bounded subscriber concurrency
 - explicit failure when exchange or queue is missing
 - explicit failure when retry topology is missing
 - explicit failure when dead-letter topology is missing

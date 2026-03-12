@@ -330,4 +330,4 @@ If the tool detects a destructive or unsupported change, it prints the blocking 
 - use `apply` without `--migrate` by default
 - use `apply --migrate` only for reviewed incompatible changes
 - treat generated queue recreation as message-destructive
-- validate runtime consumers against the exact retry and dead-letter topology declared in YAML
+- validate runtime subscribers against the exact retry and dead-letter topology declared in YAML
