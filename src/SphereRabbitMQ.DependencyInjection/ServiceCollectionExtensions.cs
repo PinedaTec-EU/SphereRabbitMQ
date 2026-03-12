@@ -1,18 +1,18 @@
 using Microsoft.Extensions.DependencyInjection;
 using SphereRabbitMQ.Abstractions.Configuration;
-using SphereRabbitMQ.Abstractions.Consumers;
+using SphereRabbitMQ.Abstractions.Subscribers;
 using SphereRabbitMQ.Abstractions.Publishing;
 using SphereRabbitMQ.Abstractions.Serialization;
 using SphereRabbitMQ.Abstractions.Topology;
-using SphereRabbitMQ.Application.Consumers;
+using SphereRabbitMQ.Application.Subscribers;
 using SphereRabbitMQ.Application.Retry;
 using SphereRabbitMQ.Application.Serialization;
-using SphereRabbitMQ.DependencyInjection.Consumers;
+using SphereRabbitMQ.DependencyInjection.Subscribers;
 using SphereRabbitMQ.Domain.Messaging;
 using SphereRabbitMQ.Infrastructure.RabbitMQ.Connection;
 using SphereRabbitMQ.Infrastructure.RabbitMQ.Migration;
 using SphereRabbitMQ.Infrastructure.RabbitMQ.Migration.Interfaces;
-using SphereRabbitMQ.Infrastructure.RabbitMQ.Consumers;
+using SphereRabbitMQ.Infrastructure.RabbitMQ.Subscribers;
 using SphereRabbitMQ.Infrastructure.RabbitMQ.Publishing;
 using SphereRabbitMQ.Infrastructure.RabbitMQ.Serialization;
 using SphereRabbitMQ.Infrastructure.RabbitMQ.Topology;
@@ -36,25 +36,27 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IQueueMessageMover, RabbitMqQueueMessageMover>();
         services.AddSingleton<RetryHeaderAccessor>();
         services.AddSingleton<IMessageSerializer, SystemTextJsonMessageSerializer>();
-        services.AddSingleton<IPublisher, RabbitMqPublisher>();
-        services.AddSingleton<ISubscriber, RabbitMqSubscriber>();
-        services.AddSingleton<IConsumerErrorStrategy, DefaultConsumerErrorStrategy>();
+        services.AddSingleton<IRabbitMQPublisher, RabbitMqPublisher>();
+        services.AddSingleton<IRabbitMQSubscriber, RabbitMqSubscriber>();
+        services.AddSingleton<ISubscriberErrorStrategy, DefaultSubscriberErrorStrategy>();
+        services.AddSingleton<ISubscriberInfrastructureRouteResolver, DefaultSubscriberInfrastructureRouteResolver>();
+        services.AddSingleton<ISubscriberTopologyExpectationProvider, DefaultSubscriberTopologyExpectationProvider>();
         services.AddSingleton<IRetryPolicyResolver, DefaultRetryPolicyResolver>();
         services.AddSingleton<IRabbitMqTopologyValidator, RabbitMqTopologyValidator>();
         services.AddHostedService<RabbitMqTopologyValidationHostedService>();
-        services.AddHostedService<RabbitMqConsumersHostedService>();
+        services.AddHostedService<RabbitMqSubscribersHostedService>();
         return services;
     }
 
-    public static IServiceCollection AddRabbitConsumer<TMessage, THandler>(
+    public static IServiceCollection AddRabbitSubscriber<TMessage, THandler>(
         this IServiceCollection services,
-        Action<RabbitConsumerRegistrationBuilder<TMessage>> configure)
-        where THandler : class, IRabbitMessageHandler<TMessage>
+        Action<RabbitSubscriberRegistrationBuilder<TMessage>> configure)
+        where THandler : class, IRabbitSubscriberMessageHandler<TMessage>
     {
         services.AddScoped<THandler>();
-        services.AddSingleton<IRabbitConsumerRegistration>(_ =>
+        services.AddSingleton<IRabbitSubscriberRegistration>(_ =>
         {
-            return new RabbitConsumerRegistration<TMessage>(builder =>
+            return new RabbitSubscriberRegistration<TMessage>(builder =>
             {
                 configure(builder);
                 builder.UseHandler<THandler>();
@@ -63,13 +65,13 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
-    public static IServiceCollection AddRabbitConsumer<TMessage>(
+    public static IServiceCollection AddRabbitSubscriber<TMessage>(
         this IServiceCollection services,
-        Action<RabbitConsumerRegistrationBuilder<TMessage>> configure,
+        Action<RabbitSubscriberRegistrationBuilder<TMessage>> configure,
         Func<MessageEnvelope<TMessage>, CancellationToken, Task> handler)
     {
-        services.AddSingleton<IRabbitConsumerRegistration>(_ =>
-            new RabbitConsumerRegistration<TMessage>(builder =>
+        services.AddSingleton<IRabbitSubscriberRegistration>(_ =>
+            new RabbitSubscriberRegistration<TMessage>(builder =>
             {
                 configure(builder);
                 builder.Handle(handler);

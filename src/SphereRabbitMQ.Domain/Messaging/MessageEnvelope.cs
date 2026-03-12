@@ -1,7 +1,7 @@
 namespace SphereRabbitMQ.Domain.Messaging;
 
 /// <summary>
-/// Immutable typed message envelope exposed to publishers and consumers.
+/// Immutable typed message envelope exposed to publishers and subscribers.
 /// </summary>
 public sealed record MessageEnvelope<TMessage>(
     TMessage Body,

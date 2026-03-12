@@ -40,7 +40,7 @@ public sealed class RabbitMqQueueMessageMoverIntegrationTests
         });
 
         await using var provider = services.BuildServiceProvider();
-        var publisher = provider.GetRequiredService<IPublisher>();
+        var publisher = provider.GetRequiredService<IRabbitMQPublisher>();
         var mover = provider.GetRequiredService<IQueueMessageMover>();
 
         await PurgeQueueAsync("orders.created");

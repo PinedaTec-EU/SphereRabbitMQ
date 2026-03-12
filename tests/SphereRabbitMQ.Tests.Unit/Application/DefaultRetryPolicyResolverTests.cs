@@ -1,5 +1,5 @@
 using SphereRabbitMQ.Application.Retry;
-using SphereRabbitMQ.Domain.Consumers;
+using SphereRabbitMQ.Domain.Subscribers;
 using SphereRabbitMQ.Domain.Retry;
 
 namespace SphereRabbitMQ.Tests.Unit.Application;
@@ -10,9 +10,9 @@ public sealed class DefaultRetryPolicyResolverTests
     public void Resolve_ReturnsRetry_WhenRetryIsEnabledAndAttemptsRemain()
     {
         var resolver = new DefaultRetryPolicyResolver();
-        var settings = new ConsumerErrorHandlingSettings
+        var settings = new SubscriberErrorHandlingSettings
         {
-            Strategy = ConsumerErrorStrategyKind.RetryThenDeadLetter,
+            Strategy = SubscriberErrorStrategyKind.RetryThenDeadLetter,
             MaxRetryAttempts = 5,
             RetryRoute = new RetryRouteDefinition("orders.retry", "orders.created.retry"),
         };
@@ -27,9 +27,9 @@ public sealed class DefaultRetryPolicyResolverTests
     public void Resolve_ReturnsNoRetry_WhenExceptionIsNonRetriable()
     {
         var resolver = new DefaultRetryPolicyResolver();
-        var settings = new ConsumerErrorHandlingSettings
+        var settings = new SubscriberErrorHandlingSettings
         {
-            Strategy = ConsumerErrorStrategyKind.RetryOnly,
+            Strategy = SubscriberErrorStrategyKind.RetryOnly,
             MaxRetryAttempts = 5,
             RetryRoute = new RetryRouteDefinition("orders.retry", "orders.created.retry"),
             NonRetriableExceptions = [typeof(ArgumentException)],
@@ -45,9 +45,9 @@ public sealed class DefaultRetryPolicyResolverTests
     public void Resolve_ReturnsNoRetry_WhenExceptionIsFrameworkNonRetriable()
     {
         var resolver = new DefaultRetryPolicyResolver();
-        var settings = new ConsumerErrorHandlingSettings
+        var settings = new SubscriberErrorHandlingSettings
         {
-            Strategy = ConsumerErrorStrategyKind.RetryOnly,
+            Strategy = SubscriberErrorStrategyKind.RetryOnly,
             MaxRetryAttempts = 5,
             RetryRoute = new RetryRouteDefinition("orders.retry", "orders.created.retry"),
         };
@@ -62,9 +62,9 @@ public sealed class DefaultRetryPolicyResolverTests
     public void Resolve_ReturnsNoRetry_WhenExceptionIsFrameworkDiscard()
     {
         var resolver = new DefaultRetryPolicyResolver();
-        var settings = new ConsumerErrorHandlingSettings
+        var settings = new SubscriberErrorHandlingSettings
         {
-            Strategy = ConsumerErrorStrategyKind.RetryOnly,
+            Strategy = SubscriberErrorStrategyKind.RetryOnly,
             MaxRetryAttempts = 5,
             RetryRoute = new RetryRouteDefinition("orders.retry", "orders.created.retry"),
         };
@@ -79,9 +79,9 @@ public sealed class DefaultRetryPolicyResolverTests
     public void Resolve_ReturnsNoRetry_WhenRetryRouteIsMissing()
     {
         var resolver = new DefaultRetryPolicyResolver();
-        var settings = new ConsumerErrorHandlingSettings
+        var settings = new SubscriberErrorHandlingSettings
         {
-            Strategy = ConsumerErrorStrategyKind.RetryOnly,
+            Strategy = SubscriberErrorStrategyKind.RetryOnly,
             MaxRetryAttempts = 5,
             RetryRoute = null,
         };
@@ -96,9 +96,9 @@ public sealed class DefaultRetryPolicyResolverTests
     public void Resolve_ReturnsNoRetry_WhenMaxAttemptsIsReached()
     {
         var resolver = new DefaultRetryPolicyResolver();
-        var settings = new ConsumerErrorHandlingSettings
+        var settings = new SubscriberErrorHandlingSettings
         {
-            Strategy = ConsumerErrorStrategyKind.RetryThenDeadLetter,
+            Strategy = SubscriberErrorStrategyKind.RetryThenDeadLetter,
             MaxRetryAttempts = 2,
             RetryRoute = new RetryRouteDefinition("orders.retry", "orders.created.retry"),
         };
@@ -110,12 +110,12 @@ public sealed class DefaultRetryPolicyResolverTests
     }
 
     [Theory]
-    [InlineData(ConsumerErrorStrategyKind.DeadLetterOnly)]
-    [InlineData(ConsumerErrorStrategyKind.Discard)]
-    public void Resolve_ReturnsNoRetry_WhenStrategyDoesNotAllowRetry(ConsumerErrorStrategyKind strategy)
+    [InlineData(SubscriberErrorStrategyKind.DeadLetterOnly)]
+    [InlineData(SubscriberErrorStrategyKind.Discard)]
+    public void Resolve_ReturnsNoRetry_WhenStrategyDoesNotAllowRetry(SubscriberErrorStrategyKind strategy)
     {
         var resolver = new DefaultRetryPolicyResolver();
-        var settings = new ConsumerErrorHandlingSettings
+        var settings = new SubscriberErrorHandlingSettings
         {
             Strategy = strategy,
             MaxRetryAttempts = 5,

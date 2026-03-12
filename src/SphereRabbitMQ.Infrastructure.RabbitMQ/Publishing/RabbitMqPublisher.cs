@@ -5,11 +5,13 @@ using RabbitMQ.Client.Exceptions;
 using SphereRabbitMQ.Abstractions.Configuration;
 using SphereRabbitMQ.Abstractions.Publishing;
 using SphereRabbitMQ.Abstractions.Serialization;
+using SphereRabbitMQ.Domain.Publishing;
 
 namespace SphereRabbitMQ.Infrastructure.RabbitMQ.Publishing;
 
-public sealed class RabbitMqPublisher : IPublisher
+public sealed class RabbitMqPublisher : IRabbitMQPublisher
 {
+    private readonly IEnumerable<IRabbitMQPublisherFailureHandler> _failureHandlers;
     private readonly ILogger<RabbitMqPublisher> _logger;
     private readonly IMessageSerializer _messageSerializer;
     private readonly SphereRabbitMqOptions _options;
@@ -18,11 +20,13 @@ public sealed class RabbitMqPublisher : IPublisher
     public RabbitMqPublisher(
         RabbitMqChannelPool channelPool,
         IMessageSerializer messageSerializer,
+        IEnumerable<IRabbitMQPublisherFailureHandler> failureHandlers,
         IOptions<SphereRabbitMqOptions> options,
         ILogger<RabbitMqPublisher> logger)
     {
         _channelPool = channelPool;
         _messageSerializer = messageSerializer;
+        _failureHandlers = failureHandlers;
         _options = options.Value;
         _logger = logger;
     }
@@ -47,6 +51,7 @@ public sealed class RabbitMqPublisher : IPublisher
         }
         catch (OperationInterruptedException exception)
         {
+            await NotifyFailureHandlersAsync(exchange, routingKey, typeof(TMessage), PublisherFailureStage.EnsureExchangeExists, exception, cancellationToken);
             throw new InvalidOperationException($"Exchange '{exchange}' does not exist. SphereRabbitMQ does not create topology automatically.", exception);
         }
 
@@ -59,9 +64,50 @@ public sealed class RabbitMqPublisher : IPublisher
             Timestamp = new AmqpTimestamp((options.Timestamp ?? DateTimeOffset.UtcNow).ToUnixTimeSeconds()),
             Headers = new Dictionary<string, object?>(options.Headers, StringComparer.Ordinal),
         };
-        var body = _messageSerializer.Serialize(message);
+        ReadOnlyMemory<byte> body;
+
+        try
+        {
+            body = _messageSerializer.Serialize(message);
+        }
+        catch (Exception exception)
+        {
+            await NotifyFailureHandlersAsync(exchange, routingKey, typeof(TMessage), PublisherFailureStage.Serialize, exception, cancellationToken);
+            throw;
+        }
 
         _logger.LogInformation("Publishing message to exchange {Exchange} with routing key {RoutingKey}.", exchange, routingKey);
-        await channel.BasicPublishAsync(exchange, routingKey, mandatory: true, properties, body, cancellationToken);
+        try
+        {
+            await channel.BasicPublishAsync(exchange, routingKey, mandatory: true, properties, body, cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            await NotifyFailureHandlersAsync(exchange, routingKey, typeof(TMessage), PublisherFailureStage.Publish, exception, cancellationToken);
+            throw;
+        }
+    }
+
+    private async Task NotifyFailureHandlersAsync(
+        string exchange,
+        string routingKey,
+        Type messageType,
+        PublisherFailureStage stage,
+        Exception exception,
+        CancellationToken cancellationToken)
+    {
+        var context = new PublisherFailureContext(exchange, routingKey, messageType, stage, exception);
+
+        foreach (var failureHandler in _failureHandlers)
+        {
+            try
+            {
+                await failureHandler.OnPublishFailureAsync(context, cancellationToken);
+            }
+            catch (Exception handlerException)
+            {
+                _logger.LogError(handlerException, "Publisher failure handler failed for exchange {Exchange} and routing key {RoutingKey}.", exchange, routingKey);
+            }
+        }
     }
 }

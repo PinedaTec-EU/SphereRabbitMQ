@@ -3,7 +3,6 @@ using System.Runtime.Serialization;
 
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-
 using Moq;
 
 using RabbitMQ.Client;
@@ -46,7 +45,8 @@ public sealed class RabbitMqTopologyValidatorTests
                 ExpectedTopology = new TopologyExpectation(
                     Exchanges: ["z.exchange", "a.exchange"],
                     Queues: ["z.queue", "a.queue"]),
-            });
+            },
+            derivedExpectation: new TopologyExpectation(Array.Empty<string>(), Array.Empty<string>()));
 
         await validator.ValidateAsync(CancellationToken.None);
 
@@ -74,7 +74,8 @@ public sealed class RabbitMqTopologyValidatorTests
                 ExpectedTopology = new TopologyExpectation(
                     Exchanges: ["orders"],
                     Queues: Array.Empty<string>()),
-            });
+            },
+            derivedExpectation: new TopologyExpectation(Array.Empty<string>(), Array.Empty<string>()));
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => validator.ValidateAsync(CancellationToken.None));
 
@@ -102,7 +103,8 @@ public sealed class RabbitMqTopologyValidatorTests
                 ExpectedTopology = new TopologyExpectation(
                     Exchanges: ["orders"],
                     Queues: ["orders.created"]),
-            });
+            },
+            derivedExpectation: new TopologyExpectation(Array.Empty<string>(), Array.Empty<string>()));
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => validator.ValidateAsync(CancellationToken.None));
 
@@ -110,13 +112,61 @@ public sealed class RabbitMqTopologyValidatorTests
         Assert.Same(interrupted, exception.InnerException);
     }
 
+    [Fact]
+    public async Task ValidateAsync_DerivesSubscriberTopology_WhenStartupValidationIsEnabled()
+    {
+        var channelMock = new Mock<IChannel>(MockBehavior.Strict);
+        channelMock.Setup(channel => channel.DisposeAsync()).Returns(ValueTask.CompletedTask);
+
+        var sequence = new MockSequence();
+        channelMock.InSequence(sequence)
+            .Setup(channel => channel.ExchangeDeclarePassiveAsync("orders.created.dlx", It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        channelMock.InSequence(sequence)
+            .Setup(channel => channel.ExchangeDeclarePassiveAsync("orders.created.retry", It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        channelMock.InSequence(sequence)
+            .Setup(channel => channel.QueueDeclarePassiveAsync("orders.created", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new QueueDeclareOk("orders.created", 0, 0));
+        channelMock.InSequence(sequence)
+            .Setup(channel => channel.QueueDeclarePassiveAsync("orders.created.dlq", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new QueueDeclareOk("orders.created.dlq", 0, 0));
+        channelMock.InSequence(sequence)
+            .Setup(channel => channel.QueueDeclarePassiveAsync("orders.created.retry.step1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new QueueDeclareOk("orders.created.retry.step1", 0, 0));
+
+        var validator = CreateValidator(
+            CreateConnectionProvider(channelMock.Object),
+            new SphereRabbitMqOptions(),
+            new TopologyExpectation(
+                Exchanges: ["orders.created.retry", "orders.created.dlx"],
+                Queues: ["orders.created", "orders.created.retry.step1", "orders.created.dlq"]));
+
+        await validator.ValidateAsync(CancellationToken.None);
+
+        channelMock.Verify(channel => channel.ExchangeDeclarePassiveAsync("orders.created.retry", It.IsAny<CancellationToken>()), Times.Once);
+        channelMock.Verify(channel => channel.ExchangeDeclarePassiveAsync("orders.created.dlx", It.IsAny<CancellationToken>()), Times.Once);
+        channelMock.Verify(channel => channel.QueueDeclarePassiveAsync("orders.created", It.IsAny<CancellationToken>()), Times.Once);
+        channelMock.Verify(channel => channel.QueueDeclarePassiveAsync("orders.created.retry.step1", It.IsAny<CancellationToken>()), Times.Once);
+        channelMock.Verify(channel => channel.QueueDeclarePassiveAsync("orders.created.dlq", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     private static IRabbitMqTopologyValidator CreateValidator(
         RabbitMqConnectionProvider connectionProvider,
-        SphereRabbitMqOptions options)
-        => new RabbitMqTopologyValidator(
+        SphereRabbitMqOptions options,
+        TopologyExpectation derivedExpectation)
+    {
+        var expectationProviderMock = new Mock<ISubscriberTopologyExpectationProvider>();
+        expectationProviderMock
+            .Setup(provider => provider.BuildExpectation())
+            .Returns(derivedExpectation);
+
+        return new RabbitMqTopologyValidator(
             connectionProvider,
             Options.Create(options),
+            expectationProviderMock.Object,
             NullLogger<RabbitMqTopologyValidator>.Instance);
+    }
 
     private static RabbitMqConnectionProvider CreateConnectionProvider(IChannel channel)
     {

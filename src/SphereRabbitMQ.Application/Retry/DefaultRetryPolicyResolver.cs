@@ -1,5 +1,5 @@
-using SphereRabbitMQ.Abstractions.Consumers;
-using SphereRabbitMQ.Domain.Consumers;
+using SphereRabbitMQ.Abstractions.Subscribers;
+using SphereRabbitMQ.Domain.Subscribers;
 using SphereRabbitMQ.Domain.Retry;
 
 namespace SphereRabbitMQ.Application.Retry;
@@ -7,7 +7,7 @@ namespace SphereRabbitMQ.Application.Retry;
 public sealed class DefaultRetryPolicyResolver : IRetryPolicyResolver
 {
     public RetryDecision Resolve(
-        ConsumerErrorHandlingSettings settings,
+        SubscriberErrorHandlingSettings settings,
         RetryMetadata metadata,
         Exception exception)
     {
@@ -27,7 +27,7 @@ public sealed class DefaultRetryPolicyResolver : IRetryPolicyResolver
         }
 
         var nextRetryCount = metadata.RetryCount + 1;
-        var shouldRetry = settings.Strategy is ConsumerErrorStrategyKind.RetryOnly or ConsumerErrorStrategyKind.RetryThenDeadLetter
+        var shouldRetry = settings.Strategy is SubscriberErrorStrategyKind.RetryOnly or SubscriberErrorStrategyKind.RetryThenDeadLetter
             && settings.RetryRoute is not null
             && nextRetryCount <= settings.MaxRetryAttempts;
 

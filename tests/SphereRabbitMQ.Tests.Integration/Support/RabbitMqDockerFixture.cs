@@ -50,9 +50,9 @@ public sealed class RabbitMqDockerFixture : IAsyncLifetime
         await channel.QueueDeclareAsync("orders.created.migration", true, false, false, null, false, false);
         await channel.QueueBindAsync("orders.created", "orders", "orders.created", null, false);
 
-        await channel.ExchangeDeclareAsync("orders.retry", "direct", true, false, null, false, false);
+        await channel.ExchangeDeclareAsync("orders.created.retry", "direct", true, false, null, false, false);
         await channel.QueueDeclareAsync(
-            "orders.created.retry",
+            "orders.created.retry.step1",
             true,
             false,
             false,
@@ -64,11 +64,11 @@ public sealed class RabbitMqDockerFixture : IAsyncLifetime
             },
             false,
             false);
-        await channel.QueueBindAsync("orders.created.retry", "orders.retry", "orders.created.retry", null, false);
+        await channel.QueueBindAsync("orders.created.retry.step1", "orders.created.retry", "orders.created.retry.step1", null, false);
 
-        await channel.ExchangeDeclareAsync("orders.dlx", "direct", true, false, null, false, false);
+        await channel.ExchangeDeclareAsync("orders.created.dlx", "direct", true, false, null, false, false);
         await channel.QueueDeclareAsync("orders.created.dlq", true, false, false, null, false, false);
-        await channel.QueueBindAsync("orders.created.dlq", "orders.dlx", "orders.created.dlq", null, false);
+        await channel.QueueBindAsync("orders.created.dlq", "orders.created.dlx", "orders.created.dlq", null, false);
     }
 
     public ConnectionFactory CreateConnectionFactory()

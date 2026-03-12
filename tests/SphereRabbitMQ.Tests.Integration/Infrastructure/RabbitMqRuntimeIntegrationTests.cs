@@ -1,13 +1,18 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using RabbitMQ.Client;
 using SphereRabbitMQ.Abstractions.Configuration;
-using SphereRabbitMQ.Abstractions.Consumers;
+using SphereRabbitMQ.Abstractions.Subscribers;
 using SphereRabbitMQ.Abstractions.Publishing;
+using SphereRabbitMQ.Abstractions.Serialization;
 using SphereRabbitMQ.DependencyInjection;
-using SphereRabbitMQ.Domain.Consumers;
+using SphereRabbitMQ.Domain.Publishing;
+using SphereRabbitMQ.Domain.Subscribers;
 using SphereRabbitMQ.Domain.Messaging;
 using RabbitMQ.Client.Exceptions;
+using SphereRabbitMQ.Infrastructure.RabbitMQ.Connection;
+using SphereRabbitMQ.Infrastructure.RabbitMQ.Publishing;
 using SphereRabbitMQ.Tests.Integration.Support;
 
 namespace SphereRabbitMQ.Tests.Integration.Infrastructure;
@@ -32,14 +37,14 @@ public sealed class RabbitMqRuntimeIntegrationTests
 
         var services = CreateServices();
         await using var provider = services.BuildServiceProvider();
-        var publisher = provider.GetRequiredService<IPublisher>();
-        var subscriber = provider.GetRequiredService<ISubscriber>();
-        await PurgeQueuesAsync("orders.created", "orders.created.retry", "orders.created.dlq");
+        var publisher = provider.GetRequiredService<IRabbitMQPublisher>();
+        var subscriber = provider.GetRequiredService<IRabbitMQSubscriber>();
+        await PurgeQueuesAsync("orders.created", "orders.created.retry.step1", "orders.created.dlq");
         var received = new TaskCompletionSource<MessageEnvelope<OrderCreated>>(TaskCreationOptions.RunContinuationsAsynchronously);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         var subscription = Task.Run(() => subscriber.SubscribeAsync(
-            new ConsumerDefinition<OrderCreated>
+            new SubscriberDefinition<OrderCreated>
             {
                 QueueName = "orders.created",
                 PrefetchCount = 5,
@@ -61,6 +66,98 @@ public sealed class RabbitMqRuntimeIntegrationTests
     }
 
     [Fact]
+    public async Task PublishAsync_ReusesSinglePublishingChannel_AcrossSequentialPublishes()
+    {
+        if (!_fixture.IsAvailable)
+        {
+            return;
+        }
+
+        var services = CreateServices();
+        await using var provider = services.BuildServiceProvider();
+        var publisher = provider.GetRequiredService<IRabbitMQPublisher>();
+        var channelPool = provider.GetRequiredService<RabbitMqChannelPool>();
+        await PurgeQueuesAsync("orders.created");
+
+        await publisher.PublishAsync("orders", "orders.created", new OrderCreated("reuse-1"));
+        var firstChannel = GetPrivateField<IChannel?>(channelPool, "_channel");
+
+        await publisher.PublishAsync("orders", "orders.created", new OrderCreated("reuse-2"));
+        var secondChannel = GetPrivateField<IChannel?>(channelPool, "_channel");
+
+        Assert.NotNull(firstChannel);
+        Assert.NotNull(secondChannel);
+        Assert.Same(firstChannel, secondChannel);
+        Assert.True(secondChannel!.IsOpen);
+        Assert.Equal(2u, await CountMessagesAsync("orders.created"));
+    }
+
+    [Fact]
+    public async Task PublisherAndSubscriber_ShareSameConnectionProviderConnection()
+    {
+        if (!_fixture.IsAvailable)
+        {
+            return;
+        }
+
+        var services = CreateServices();
+        await using var provider = services.BuildServiceProvider();
+        var publisher = provider.GetRequiredService<IRabbitMQPublisher>();
+        var subscriber = provider.GetRequiredService<IRabbitMQSubscriber>();
+        var connectionProvider = provider.GetRequiredService<RabbitMqConnectionProvider>();
+        await PurgeQueuesAsync("orders.created");
+        var received = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+        var initialConnection = await connectionProvider.GetConnectionAsync(CancellationToken.None);
+
+        var subscription = Task.Run(() => subscriber.SubscribeAsync(
+            new SubscriberDefinition<OrderCreated>
+            {
+                QueueName = "orders.created",
+                PrefetchCount = 1,
+                MaxConcurrency = 1,
+                Handler = (_, _) =>
+                {
+                    received.TrySetResult();
+                    return Task.CompletedTask;
+                },
+            },
+            cts.Token));
+
+        await publisher.PublishAsync("orders", "orders.created", new OrderCreated("shared-connection"));
+        await received.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var currentConnection = GetPrivateField<IConnection?>(connectionProvider, "_connection");
+        cts.Cancel();
+        await IgnoreCancellationAsync(subscription);
+
+        Assert.NotNull(currentConnection);
+        Assert.Same(initialConnection, currentConnection);
+    }
+
+    [Fact]
+    public async Task PublishAsync_HandlesConcurrentPublishRequests_WithoutLosingMessages()
+    {
+        if (!_fixture.IsAvailable)
+        {
+            return;
+        }
+
+        var services = CreateServices();
+        await using var provider = services.BuildServiceProvider();
+        var publisher = provider.GetRequiredService<IRabbitMQPublisher>();
+        await PurgeQueuesAsync("orders.created");
+
+        var publishTasks = Enumerable.Range(0, 20)
+            .Select(index => publisher.PublishAsync("orders", "orders.created", new OrderCreated($"concurrent-{index}")))
+            .ToArray();
+
+        await Task.WhenAll(publishTasks);
+
+        Assert.Equal(20u, await CountMessagesAsync("orders.created"));
+    }
+
+    [Fact]
     public async Task RetryRoutingAsync_RequeuesThroughBrokerRetryTopology()
     {
         if (!_fixture.IsAvailable)
@@ -70,24 +167,23 @@ public sealed class RabbitMqRuntimeIntegrationTests
 
         var services = CreateServices();
         await using var provider = services.BuildServiceProvider();
-        var publisher = provider.GetRequiredService<IPublisher>();
-        var subscriber = provider.GetRequiredService<ISubscriber>();
-        await PurgeQueuesAsync("orders.created", "orders.created.retry", "orders.created.dlq");
+        var publisher = provider.GetRequiredService<IRabbitMQPublisher>();
+        var subscriber = provider.GetRequiredService<IRabbitMQSubscriber>();
+        await PurgeQueuesAsync("orders.created", "orders.created.retry.step1", "orders.created.dlq");
         var attempts = 0;
         var completed = new TaskCompletionSource<MessageEnvelope<OrderCreated>>(TaskCreationOptions.RunContinuationsAsynchronously);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
 
         var subscription = Task.Run(() => subscriber.SubscribeAsync(
-            new ConsumerDefinition<OrderCreated>
+            new SubscriberDefinition<OrderCreated>
             {
                 QueueName = "orders.created",
                 PrefetchCount = 1,
                 MaxConcurrency = 1,
-                ErrorHandling = new ConsumerErrorHandlingSettings
+                ErrorHandling = new SubscriberErrorHandlingSettings
                 {
-                    Strategy = ConsumerErrorStrategyKind.RetryOnly,
+                    Strategy = SubscriberErrorStrategyKind.RetryOnly,
                     MaxRetryAttempts = 1,
-                    RetryRoute = new RetryRouteDefinition("orders.retry", "orders.created.retry"),
                 },
                 Handler = (message, _) =>
                 {
@@ -122,36 +218,35 @@ public sealed class RabbitMqRuntimeIntegrationTests
 
         var services = CreateServices();
         await using var provider = services.BuildServiceProvider();
-        var publisher = provider.GetRequiredService<IPublisher>();
-        var subscriber = provider.GetRequiredService<ISubscriber>();
-        await PurgeQueuesAsync("orders.created", "orders.created.retry", "orders.created.dlq");
+        var publisher = provider.GetRequiredService<IRabbitMQPublisher>();
+        var subscriber = provider.GetRequiredService<IRabbitMQSubscriber>();
+        await PurgeQueuesAsync("orders.created", "orders.created.retry.step1", "orders.created.dlq");
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 
         var subscription = Task.Run(() => subscriber.SubscribeAsync(
-            new ConsumerDefinition<OrderCreated>
+            new SubscriberDefinition<OrderCreated>
             {
                 QueueName = "orders.created",
                 PrefetchCount = 1,
                 MaxConcurrency = 1,
-                ErrorHandling = new ConsumerErrorHandlingSettings
+                ErrorHandling = new SubscriberErrorHandlingSettings
                 {
-                    Strategy = ConsumerErrorStrategyKind.DeadLetterOnly,
-                    DeadLetterRoute = new DeadLetterRouteDefinition("orders.dlx", "orders.created.dlq"),
+                    Strategy = SubscriberErrorStrategyKind.DeadLetterOnly,
                 },
                 Handler = (_, _) => throw new InvalidOperationException("force dlq"),
             },
             cts.Token));
 
         await publisher.PublishAsync("orders", "orders.created", new OrderCreated("order-3"));
-        var dlqMessage = await WaitForDlqMessageAsync();
+        var dlqMessage = await WaitForRawDlqMessageAsync();
         cts.Cancel();
         await IgnoreCancellationAsync(subscription);
 
-        Assert.NotNull(dlqMessage);
+        Assert.NotEmpty(dlqMessage.ToArray());
     }
 
     [Fact]
-    public async Task ConsumerConcurrency_IsBoundedByMaxConcurrency()
+    public async Task SubscriberConcurrency_IsBoundedByMaxConcurrency()
     {
         if (!_fixture.IsAvailable)
         {
@@ -160,9 +255,9 @@ public sealed class RabbitMqRuntimeIntegrationTests
 
         var services = CreateServices();
         await using var provider = services.BuildServiceProvider();
-        var publisher = provider.GetRequiredService<IPublisher>();
-        var subscriber = provider.GetRequiredService<ISubscriber>();
-        await PurgeQueuesAsync("orders.created", "orders.created.retry", "orders.created.dlq");
+        var publisher = provider.GetRequiredService<IRabbitMQPublisher>();
+        var subscriber = provider.GetRequiredService<IRabbitMQSubscriber>();
+        await PurgeQueuesAsync("orders.created", "orders.created.retry.step1", "orders.created.dlq");
         var started = 0;
         var maxObserved = 0;
         var completed = 0;
@@ -170,7 +265,7 @@ public sealed class RabbitMqRuntimeIntegrationTests
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
 
         var subscription = Task.Run(() => subscriber.SubscribeAsync(
-            new ConsumerDefinition<OrderCreated>
+            new SubscriberDefinition<OrderCreated>
             {
                 QueueName = "orders.created",
                 PrefetchCount = 5,
@@ -219,7 +314,7 @@ public sealed class RabbitMqRuntimeIntegrationTests
 
         var services = CreateServices();
         await using var provider = services.BuildServiceProvider();
-        var publisher = provider.GetRequiredService<IPublisher>();
+        var publisher = provider.GetRequiredService<IRabbitMQPublisher>();
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             publisher.PublishAsync("orders.missing", "orders.created", new OrderCreated("missing-exchange")));
@@ -237,10 +332,10 @@ public sealed class RabbitMqRuntimeIntegrationTests
 
         var services = CreateServices();
         await using var provider = services.BuildServiceProvider();
-        var subscriber = provider.GetRequiredService<ISubscriber>();
+        var subscriber = provider.GetRequiredService<IRabbitMQSubscriber>();
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => subscriber.SubscribeAsync(
-            new ConsumerDefinition<OrderCreated>
+            new SubscriberDefinition<OrderCreated>
             {
                 QueueName = "orders.created.missing",
                 Handler = (_, _) => Task.CompletedTask,
@@ -259,21 +354,21 @@ public sealed class RabbitMqRuntimeIntegrationTests
 
         var services = CreateServices();
         await using var provider = services.BuildServiceProvider();
-        var subscriber = provider.GetRequiredService<ISubscriber>();
+        var subscriber = provider.GetRequiredService<IRabbitMQSubscriber>();
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => subscriber.SubscribeAsync(
-            new ConsumerDefinition<OrderCreated>
+            new SubscriberDefinition<OrderCreated>
             {
                 QueueName = "orders.created",
-                ErrorHandling = new ConsumerErrorHandlingSettings
+                ErrorHandling = new SubscriberErrorHandlingSettings
                 {
-                    Strategy = ConsumerErrorStrategyKind.RetryOnly,
-                    RetryRoute = new RetryRouteDefinition("orders.retry.missing", "orders.created.retry", "orders.created.retry"),
+                    Strategy = SubscriberErrorStrategyKind.RetryOnly,
+                    RetryRoute = new RetryRouteDefinition("orders.created.retry.missing", "orders.created.retry.step1", "orders.created.retry.step1"),
                 },
                 Handler = (_, _) => Task.CompletedTask,
             }));
 
-        Assert.Contains("orders.retry.missing", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("orders.created.retry.missing", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -286,21 +381,21 @@ public sealed class RabbitMqRuntimeIntegrationTests
 
         var services = CreateServices();
         await using var provider = services.BuildServiceProvider();
-        var subscriber = provider.GetRequiredService<ISubscriber>();
+        var subscriber = provider.GetRequiredService<IRabbitMQSubscriber>();
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => subscriber.SubscribeAsync(
-            new ConsumerDefinition<OrderCreated>
+            new SubscriberDefinition<OrderCreated>
             {
                 QueueName = "orders.created",
-                ErrorHandling = new ConsumerErrorHandlingSettings
+                ErrorHandling = new SubscriberErrorHandlingSettings
                 {
-                    Strategy = ConsumerErrorStrategyKind.RetryOnly,
-                    RetryRoute = new RetryRouteDefinition("orders.retry", "orders.created.retry", "orders.created.retry.missing"),
+                    Strategy = SubscriberErrorStrategyKind.RetryOnly,
+                    RetryRoute = new RetryRouteDefinition("orders.created.retry", "orders.created.retry.step1", "orders.created.retry.step1.missing"),
                 },
                 Handler = (_, _) => Task.CompletedTask,
             }));
 
-        Assert.Contains("orders.created.retry.missing", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("orders.created.retry.step1.missing", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -313,21 +408,21 @@ public sealed class RabbitMqRuntimeIntegrationTests
 
         var services = CreateServices();
         await using var provider = services.BuildServiceProvider();
-        var subscriber = provider.GetRequiredService<ISubscriber>();
+        var subscriber = provider.GetRequiredService<IRabbitMQSubscriber>();
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => subscriber.SubscribeAsync(
-            new ConsumerDefinition<OrderCreated>
+            new SubscriberDefinition<OrderCreated>
             {
                 QueueName = "orders.created",
-                ErrorHandling = new ConsumerErrorHandlingSettings
+                ErrorHandling = new SubscriberErrorHandlingSettings
                 {
-                    Strategy = ConsumerErrorStrategyKind.DeadLetterOnly,
-                    DeadLetterRoute = new DeadLetterRouteDefinition("orders.dlx.missing", "orders.created.dlq", "orders.created.dlq"),
+                    Strategy = SubscriberErrorStrategyKind.DeadLetterOnly,
+                    DeadLetterRoute = new DeadLetterRouteDefinition("orders.created.dlx.missing", "orders.created.dlq", "orders.created.dlq"),
                 },
                 Handler = (_, _) => Task.CompletedTask,
             }));
 
-        Assert.Contains("orders.dlx.missing", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("orders.created.dlx.missing", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -340,16 +435,16 @@ public sealed class RabbitMqRuntimeIntegrationTests
 
         var services = CreateServices();
         await using var provider = services.BuildServiceProvider();
-        var subscriber = provider.GetRequiredService<ISubscriber>();
+        var subscriber = provider.GetRequiredService<IRabbitMQSubscriber>();
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => subscriber.SubscribeAsync(
-            new ConsumerDefinition<OrderCreated>
+            new SubscriberDefinition<OrderCreated>
             {
                 QueueName = "orders.created",
-                ErrorHandling = new ConsumerErrorHandlingSettings
+                ErrorHandling = new SubscriberErrorHandlingSettings
                 {
-                    Strategy = ConsumerErrorStrategyKind.DeadLetterOnly,
-                    DeadLetterRoute = new DeadLetterRouteDefinition("orders.dlx", "orders.created.dlq", "orders.created.dlq.missing"),
+                    Strategy = SubscriberErrorStrategyKind.DeadLetterOnly,
+                    DeadLetterRoute = new DeadLetterRouteDefinition("orders.created.dlx", "orders.created.dlq", "orders.created.dlq.missing"),
                 },
                 Handler = (_, _) => Task.CompletedTask,
             }));
@@ -367,22 +462,20 @@ public sealed class RabbitMqRuntimeIntegrationTests
 
         var services = CreateServices();
         await using var provider = services.BuildServiceProvider();
-        var publisher = provider.GetRequiredService<IPublisher>();
-        var subscriber = provider.GetRequiredService<ISubscriber>();
-        await PurgeQueuesAsync("orders.created", "orders.created.retry", "orders.created.dlq");
+        var publisher = provider.GetRequiredService<IRabbitMQPublisher>();
+        var subscriber = provider.GetRequiredService<IRabbitMQSubscriber>();
+        await PurgeQueuesAsync("orders.created", "orders.created.retry.step1", "orders.created.dlq");
         var attempts = 0;
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 
         var subscription = Task.Run(() => subscriber.SubscribeAsync(
-            new ConsumerDefinition<OrderCreated>
+            new SubscriberDefinition<OrderCreated>
             {
                 QueueName = "orders.created",
-                ErrorHandling = new ConsumerErrorHandlingSettings
+                ErrorHandling = new SubscriberErrorHandlingSettings
                 {
-                    Strategy = ConsumerErrorStrategyKind.RetryThenDeadLetter,
+                    Strategy = SubscriberErrorStrategyKind.RetryThenDeadLetter,
                     MaxRetryAttempts = 5,
-                    RetryRoute = new RetryRouteDefinition("orders.retry", "orders.created.retry", "orders.created.retry"),
-                    DeadLetterRoute = new DeadLetterRouteDefinition("orders.dlx", "orders.created.dlq", "orders.created.dlq"),
                 },
                 Handler = (_, _) =>
                 {
@@ -393,13 +486,13 @@ public sealed class RabbitMqRuntimeIntegrationTests
             cts.Token));
 
         await publisher.PublishAsync("orders", "orders.created", new OrderCreated("order-non-retriable"));
-        var dlqMessage = await WaitForDlqMessageAsync();
+        var dlqMessage = await WaitForRawDlqMessageAsync();
         cts.Cancel();
         await IgnoreCancellationAsync(subscription);
 
-        Assert.NotNull(dlqMessage);
+        Assert.NotEmpty(dlqMessage.ToArray());
         Assert.Equal(1, attempts);
-        Assert.Equal(0u, await CountMessagesAsync("orders.created.retry"));
+        Assert.Equal(0u, await CountMessagesAsync("orders.created.retry.step1"));
     }
 
     [Fact]
@@ -412,23 +505,21 @@ public sealed class RabbitMqRuntimeIntegrationTests
 
         var services = CreateServices();
         await using var provider = services.BuildServiceProvider();
-        var publisher = provider.GetRequiredService<IPublisher>();
-        var subscriber = provider.GetRequiredService<ISubscriber>();
-        await PurgeQueuesAsync("orders.created", "orders.created.retry", "orders.created.dlq");
+        var publisher = provider.GetRequiredService<IRabbitMQPublisher>();
+        var subscriber = provider.GetRequiredService<IRabbitMQSubscriber>();
+        await PurgeQueuesAsync("orders.created", "orders.created.retry.step1", "orders.created.dlq");
         var attempts = 0;
         var processed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 
         var subscription = Task.Run(() => subscriber.SubscribeAsync(
-            new ConsumerDefinition<OrderCreated>
+            new SubscriberDefinition<OrderCreated>
             {
                 QueueName = "orders.created",
-                ErrorHandling = new ConsumerErrorHandlingSettings
+                ErrorHandling = new SubscriberErrorHandlingSettings
                 {
-                    Strategy = ConsumerErrorStrategyKind.RetryThenDeadLetter,
+                    Strategy = SubscriberErrorStrategyKind.RetryThenDeadLetter,
                     MaxRetryAttempts = 5,
-                    RetryRoute = new RetryRouteDefinition("orders.retry", "orders.created.retry", "orders.created.retry"),
-                    DeadLetterRoute = new DeadLetterRouteDefinition("orders.dlx", "orders.created.dlq", "orders.created.dlq"),
                 },
                 Handler = (_, _) =>
                 {
@@ -447,8 +538,353 @@ public sealed class RabbitMqRuntimeIntegrationTests
 
         Assert.Equal(1, attempts);
         Assert.Equal(0u, await CountMessagesAsync("orders.created"));
-        Assert.Equal(0u, await CountMessagesAsync("orders.created.retry"));
+        Assert.Equal(0u, await CountMessagesAsync("orders.created.retry.step1"));
         Assert.Equal(0u, await CountMessagesAsync("orders.created.dlq"));
+    }
+
+    [Fact]
+    public async Task RetryThenDeadLetterAsync_RetriesExpectedTimes_ThenRoutesToDeadLetter_AndNotifies()
+    {
+        if (!_fixture.IsAvailable)
+        {
+            return;
+        }
+
+        var services = CreateServices();
+        await using var provider = services.BuildServiceProvider();
+        var publisher = provider.GetRequiredService<IRabbitMQPublisher>();
+        var subscriber = provider.GetRequiredService<IRabbitMQSubscriber>();
+        await PurgeQueuesAsync("orders.created", "orders.created.retry.step1", "orders.created.dlq");
+        var attempts = 0;
+        SubscriberDeadLetterNotification<OrderCreated>? notification = null;
+        var notified = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+
+        var subscription = Task.Run(() => subscriber.SubscribeAsync(
+            new SubscriberDefinition<OrderCreated>
+            {
+                QueueName = "orders.created",
+                PrefetchCount = 1,
+                MaxConcurrency = 1,
+                ErrorHandling = new SubscriberErrorHandlingSettings
+                {
+                    Strategy = SubscriberErrorStrategyKind.RetryThenDeadLetter,
+                    MaxRetryAttempts = 2,
+                },
+                Handler = (_, _) =>
+                {
+                    attempts++;
+                    throw new InvalidOperationException("always fail");
+                },
+                DeadLetterNotificationHandler = (deadLetterNotification, _) =>
+                {
+                    notification = deadLetterNotification;
+                    notified.TrySetResult();
+                    return Task.CompletedTask;
+                },
+            },
+            cts.Token));
+
+        await publisher.PublishAsync("orders", "orders.created", new OrderCreated("order-retry-dlq"));
+        await notified.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var dlqMessage = await WaitForRawDlqMessageAsync();
+        cts.Cancel();
+        await IgnoreCancellationAsync(subscription);
+
+        Assert.Equal(3, attempts);
+        Assert.NotNull(notification);
+        Assert.Equal("order-retry-dlq", notification!.Message.Body.OrderId);
+        Assert.Equal(SubscriberFailureDisposition.DeadLetter, notification.Decision.Disposition);
+        Assert.Equal(3, notification.Decision.RetryCount);
+        Assert.Contains("order-retry-dlq", System.Text.Encoding.UTF8.GetString(dlqMessage.ToArray()), StringComparison.Ordinal);
+        Assert.Equal(0u, await CountMessagesAsync("orders.created.retry.step1"));
+    }
+
+    [Fact]
+    public async Task DeadLetterOnlyAsync_Notifies_WhenMessageIsRoutedToDeadLetterWithoutRetry()
+    {
+        if (!_fixture.IsAvailable)
+        {
+            return;
+        }
+
+        var services = CreateServices();
+        await using var provider = services.BuildServiceProvider();
+        var publisher = provider.GetRequiredService<IRabbitMQPublisher>();
+        var subscriber = provider.GetRequiredService<IRabbitMQSubscriber>();
+        await PurgeQueuesAsync("orders.created", "orders.created.retry.step1", "orders.created.dlq");
+        var attempts = 0;
+        SubscriberDeadLetterNotification<OrderCreated>? notification = null;
+        var notified = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+        var subscription = Task.Run(() => subscriber.SubscribeAsync(
+            new SubscriberDefinition<OrderCreated>
+            {
+                QueueName = "orders.created",
+                PrefetchCount = 1,
+                MaxConcurrency = 1,
+                ErrorHandling = new SubscriberErrorHandlingSettings
+                {
+                    Strategy = SubscriberErrorStrategyKind.DeadLetterOnly,
+                },
+                Handler = (_, _) =>
+                {
+                    attempts++;
+                    throw new InvalidOperationException("send to dlq");
+                },
+                DeadLetterNotificationHandler = (deadLetterNotification, _) =>
+                {
+                    notification = deadLetterNotification;
+                    notified.TrySetResult();
+                    return Task.CompletedTask;
+                },
+            },
+            cts.Token));
+
+        await publisher.PublishAsync("orders", "orders.created", new OrderCreated("order-direct-dlq"));
+        await notified.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var dlqMessage = await WaitForRawDlqMessageAsync();
+        cts.Cancel();
+        await IgnoreCancellationAsync(subscription);
+
+        Assert.Equal(1, attempts);
+        Assert.NotNull(notification);
+        Assert.Equal("order-direct-dlq", notification!.Message.Body.OrderId);
+        Assert.Equal(SubscriberFailureDisposition.DeadLetter, notification.Decision.Disposition);
+        Assert.Equal(1, notification.Decision.RetryCount);
+        Assert.Contains("order-direct-dlq", System.Text.Encoding.UTF8.GetString(dlqMessage.ToArray()), StringComparison.Ordinal);
+        Assert.Equal(0u, await CountMessagesAsync("orders.created.retry.step1"));
+    }
+
+    [Fact]
+    public async Task RetryOnlyAsync_DoesNotNotify_WhenRetriesAreExhaustedWithoutDeadLetter()
+    {
+        if (!_fixture.IsAvailable)
+        {
+            return;
+        }
+
+        var services = CreateServices();
+        await using var provider = services.BuildServiceProvider();
+        var publisher = provider.GetRequiredService<IRabbitMQPublisher>();
+        var subscriber = provider.GetRequiredService<IRabbitMQSubscriber>();
+        await PurgeQueuesAsync("orders.created", "orders.created.retry.step1", "orders.created.dlq");
+        var attempts = 0;
+        var processed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var notificationCount = 0;
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+        var subscription = Task.Run(() => subscriber.SubscribeAsync(
+            new SubscriberDefinition<OrderCreated>
+            {
+                QueueName = "orders.created",
+                PrefetchCount = 1,
+                MaxConcurrency = 1,
+                ErrorHandling = new SubscriberErrorHandlingSettings
+                {
+                    Strategy = SubscriberErrorStrategyKind.RetryOnly,
+                    MaxRetryAttempts = 1,
+                },
+                Handler = (_, _) =>
+                {
+                    attempts++;
+                    if (attempts == 2)
+                    {
+                        processed.TrySetResult();
+                    }
+
+                    throw new InvalidOperationException("retry then discard");
+                },
+                DeadLetterNotificationHandler = (_, _) =>
+                {
+                    notificationCount++;
+                    return Task.CompletedTask;
+                },
+            },
+            cts.Token));
+
+        await publisher.PublishAsync("orders", "orders.created", new OrderCreated("order-retry-only"));
+        await processed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.Delay(750);
+        cts.Cancel();
+        await IgnoreCancellationAsync(subscription);
+
+        Assert.Equal(2, attempts);
+        Assert.Equal(0, notificationCount);
+        Assert.Equal(0u, await CountMessagesAsync("orders.created.retry.step1"));
+        Assert.Equal(0u, await CountMessagesAsync("orders.created.dlq"));
+    }
+
+    [Fact]
+    public async Task DiscardStrategy_DoesNotNotify_WhenRetryAndDeadLetterAreDisabled()
+    {
+        if (!_fixture.IsAvailable)
+        {
+            return;
+        }
+
+        var services = CreateServices();
+        await using var provider = services.BuildServiceProvider();
+        var publisher = provider.GetRequiredService<IRabbitMQPublisher>();
+        var subscriber = provider.GetRequiredService<IRabbitMQSubscriber>();
+        await PurgeQueuesAsync("orders.created", "orders.created.retry.step1", "orders.created.dlq");
+        var attempts = 0;
+        var processed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var notificationCount = 0;
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+        var subscription = Task.Run(() => subscriber.SubscribeAsync(
+            new SubscriberDefinition<OrderCreated>
+            {
+                QueueName = "orders.created",
+                PrefetchCount = 1,
+                MaxConcurrency = 1,
+                ErrorHandling = new SubscriberErrorHandlingSettings
+                {
+                    Strategy = SubscriberErrorStrategyKind.Discard,
+                },
+                Handler = (_, _) =>
+                {
+                    attempts++;
+                    processed.TrySetResult();
+                    throw new InvalidOperationException("discard directly");
+                },
+                DeadLetterNotificationHandler = (_, _) =>
+                {
+                    notificationCount++;
+                    return Task.CompletedTask;
+                },
+            },
+            cts.Token));
+
+        await publisher.PublishAsync("orders", "orders.created", new OrderCreated("order-discard-no-dlq"));
+        await processed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.Delay(750);
+        cts.Cancel();
+        await IgnoreCancellationAsync(subscription);
+
+        Assert.Equal(1, attempts);
+        Assert.Equal(0, notificationCount);
+        Assert.Equal(0u, await CountMessagesAsync("orders.created"));
+        Assert.Equal(0u, await CountMessagesAsync("orders.created.retry.step1"));
+        Assert.Equal(0u, await CountMessagesAsync("orders.created.dlq"));
+    }
+
+    [Fact]
+    public async Task DeserializeFailure_DeadLettersMalformedPayload_WhenComponentFailureHandlerChoosesDeadLetter()
+    {
+        if (!_fixture.IsAvailable)
+        {
+            return;
+        }
+
+        var services = CreateServices();
+        await using var provider = services.BuildServiceProvider();
+        var subscriber = provider.GetRequiredService<IRabbitMQSubscriber>();
+        await PurgeQueuesAsync("orders.created", "orders.created.retry.step1", "orders.created.dlq");
+        var notified = new TaskCompletionSource<SubscriberComponentFailureStage>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+        var subscription = Task.Run(() => subscriber.SubscribeAsync(
+            new SubscriberDefinition<OrderCreated>
+            {
+                QueueName = "orders.created",
+                PrefetchCount = 1,
+                MaxConcurrency = 1,
+                ErrorHandling = new SubscriberErrorHandlingSettings
+                {
+                    Strategy = SubscriberErrorStrategyKind.RetryThenDeadLetter,
+                    MaxRetryAttempts = 3,
+                },
+                Handler = (_, _) => Task.CompletedTask,
+                ComponentFailureHandler = (context, _) =>
+                {
+                    notified.TrySetResult(context.Stage);
+                    return Task.FromResult(new SubscriberComponentFailureHandlingResult(SubscriberComponentFailureAction.DeadLetter));
+                },
+            },
+            cts.Token));
+
+        await PublishRawMessageAsync("orders", "orders.created", "not-json"u8.ToArray());
+        var stage = await notified.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var dlqMessage = await WaitForRawDlqMessageAsync();
+        cts.Cancel();
+        await IgnoreCancellationAsync(subscription);
+
+        Assert.Equal(SubscriberComponentFailureStage.Deserialize, stage);
+        Assert.Equal("not-json", System.Text.Encoding.UTF8.GetString(dlqMessage.ToArray()));
+        Assert.Equal(0u, await CountMessagesAsync("orders.created.retry.step1"));
+    }
+
+    [Fact]
+    public async Task DeserializeFailure_DiscardsMalformedPayload_WhenComponentFailureHandlerChoosesDiscard()
+    {
+        if (!_fixture.IsAvailable)
+        {
+            return;
+        }
+
+        var services = CreateServices();
+        await using var provider = services.BuildServiceProvider();
+        var subscriber = provider.GetRequiredService<IRabbitMQSubscriber>();
+        await PurgeQueuesAsync("orders.created", "orders.created.retry.step1", "orders.created.dlq");
+        var notified = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+        var subscription = Task.Run(() => subscriber.SubscribeAsync(
+            new SubscriberDefinition<OrderCreated>
+            {
+                QueueName = "orders.created",
+                PrefetchCount = 1,
+                MaxConcurrency = 1,
+                ErrorHandling = new SubscriberErrorHandlingSettings
+                {
+                    Strategy = SubscriberErrorStrategyKind.RetryThenDeadLetter,
+                    MaxRetryAttempts = 3,
+                },
+                Handler = (_, _) => Task.CompletedTask,
+                ComponentFailureHandler = (_, _) =>
+                {
+                    notified.TrySetResult();
+                    return Task.FromResult(new SubscriberComponentFailureHandlingResult(SubscriberComponentFailureAction.Discard));
+                },
+            },
+            cts.Token));
+
+        await PublishRawMessageAsync("orders", "orders.created", "not-json"u8.ToArray());
+        await notified.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.Delay(750);
+        cts.Cancel();
+        await IgnoreCancellationAsync(subscription);
+
+        Assert.Equal(0u, await CountMessagesAsync("orders.created"));
+        Assert.Equal(0u, await CountMessagesAsync("orders.created.retry.step1"));
+        Assert.Equal(0u, await CountMessagesAsync("orders.created.dlq"));
+    }
+
+    [Fact]
+    public async Task PublishAsync_NotifiesPublisherFailureHandler_WhenSerializerThrows()
+    {
+        if (!_fixture.IsAvailable)
+        {
+            return;
+        }
+
+        var failureHandler = new RecordingPublisherFailureHandler();
+        var services = CreateServices();
+        services.AddSingleton<IMessageSerializer, ThrowingSerializeMessageSerializer>();
+        services.AddSingleton<IRabbitMQPublisherFailureHandler>(failureHandler);
+        await using var provider = services.BuildServiceProvider();
+        var publisher = provider.GetRequiredService<IRabbitMQPublisher>();
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            publisher.PublishAsync("orders", "orders.created", new OrderCreated("serialize-failure")));
+
+        Assert.Equal("serialize failure", exception.Message);
+        Assert.Single(failureHandler.Notifications);
+        Assert.Equal(PublisherFailureStage.Serialize, failureHandler.Notifications[0].Stage);
+        Assert.Equal("orders", failureHandler.Notifications[0].Exchange);
     }
 
     private ServiceCollection CreateServices()
@@ -489,6 +925,26 @@ public sealed class RabbitMqRuntimeIntegrationTests
         return null;
     }
 
+    private async Task<ReadOnlyMemory<byte>> WaitForRawDlqMessageAsync()
+    {
+        var factory = _fixture.CreateConnectionFactory();
+        await using var connection = await factory.CreateConnectionAsync();
+        await using var channel = await connection.CreateChannelAsync();
+
+        for (var attempt = 0; attempt < 20; attempt++)
+        {
+            var result = await channel.BasicGetAsync("orders.created.dlq", true);
+            if (result is not null)
+            {
+                return result.Body;
+            }
+
+            await Task.Delay(250);
+        }
+
+        throw new InvalidOperationException("Expected raw dead-letter message was not found.");
+    }
+
     private async Task<uint> CountMessagesAsync(string queueName)
     {
         var factory = _fixture.CreateConnectionFactory();
@@ -508,6 +964,20 @@ public sealed class RabbitMqRuntimeIntegrationTests
         {
             await channel.QueuePurgeAsync(queueName);
         }
+    }
+
+    private async Task PublishRawMessageAsync(string exchange, string routingKey, ReadOnlyMemory<byte> body)
+    {
+        var factory = _fixture.CreateConnectionFactory();
+        await using var connection = await factory.CreateConnectionAsync();
+        await using var channel = await connection.CreateChannelAsync();
+        var properties = new RabbitMQ.Client.BasicProperties
+        {
+            ContentType = "application/json",
+            Persistent = true,
+        };
+
+        await channel.BasicPublishAsync(exchange, routingKey, true, properties, body, CancellationToken.None);
     }
 
     private static async Task IgnoreCancellationAsync(Task task)
@@ -539,4 +1009,33 @@ public sealed class RabbitMqRuntimeIntegrationTests
     }
 
     public sealed record OrderCreated(string OrderId);
+
+    private static T? GetPrivateField<T>(object target, string fieldName)
+    {
+        var field = target.GetType().GetField(fieldName, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        Assert.NotNull(field);
+        return (T?)field!.GetValue(target);
+    }
+
+    private sealed class ThrowingSerializeMessageSerializer : IMessageSerializer
+    {
+        public string ContentType => "application/json";
+
+        public TMessage Deserialize<TMessage>(ReadOnlyMemory<byte> body)
+            => throw new NotSupportedException("Deserialize is not used in this test.");
+
+        public ReadOnlyMemory<byte> Serialize<TMessage>(TMessage message)
+            => throw new InvalidOperationException("serialize failure");
+    }
+
+    private sealed class RecordingPublisherFailureHandler : IRabbitMQPublisherFailureHandler
+    {
+        public List<PublisherFailureContext> Notifications { get; } = new();
+
+        public Task OnPublishFailureAsync(PublisherFailureContext context, CancellationToken cancellationToken)
+        {
+            Notifications.Add(context);
+            return Task.CompletedTask;
+        }
+    }
 }
