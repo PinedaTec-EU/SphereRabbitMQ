@@ -52,7 +52,6 @@ public sealed class TopologyYamlDocumentWriter : ITopologyDocumentWriter
                     RetryQueueSuffix = document.Naming.RetryQueueSuffix,
                     DeadLetterExchangeSuffix = document.Naming.DeadLetterExchangeSuffix,
                     DeadLetterQueueSuffix = document.Naming.DeadLetterQueueSuffix,
-                    ParkingLotQueueSuffix = document.Naming.ParkingLotQueueSuffix,
                     StepTokenPrefix = document.Naming.StepTokenPrefix,
                 },
             VirtualHosts = document.VirtualHosts.Select(MapVirtualHost).ToList(),
@@ -110,7 +109,6 @@ public sealed class TopologyYamlDocumentWriter : ITopologyDocumentWriter
                     Enabled = document.Retry.Enabled,
                     AutoGenerateArtifacts = document.Retry.AutoGenerateArtifacts,
                     ExchangeName = document.Retry.ExchangeName,
-                    ParkingLotQueueName = document.Retry.ParkingLotQueueName,
                     Steps = document.Retry.Steps.Select(step => new RetryStepYamlDocument
                     {
                         Delay = step.Delay.ToString(),

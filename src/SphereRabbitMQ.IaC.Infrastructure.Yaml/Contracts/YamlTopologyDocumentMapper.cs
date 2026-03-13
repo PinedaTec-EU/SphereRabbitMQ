@@ -39,7 +39,6 @@ public static class YamlTopologyDocumentMapper
                     RetryQueueSuffix = yamlDocument.Naming.RetryQueueSuffix,
                     DeadLetterExchangeSuffix = yamlDocument.Naming.DeadLetterExchangeSuffix,
                     DeadLetterQueueSuffix = yamlDocument.Naming.DeadLetterQueueSuffix,
-                    ParkingLotQueueSuffix = yamlDocument.Naming.ParkingLotQueueSuffix,
                     StepTokenPrefix = yamlDocument.Naming.StepTokenPrefix,
                 },
             VirtualHosts = yamlDocument.VirtualHosts.Select(Map).ToArray(),
@@ -96,7 +95,6 @@ public static class YamlTopologyDocumentMapper
                     Enabled = yamlDocument.Retry.Enabled,
                     AutoGenerateArtifacts = yamlDocument.Retry.AutoGenerateArtifacts,
                     ExchangeName = yamlDocument.Retry.ExchangeName,
-                    ParkingLotQueueName = yamlDocument.Retry.ParkingLotQueueName,
                     Steps = yamlDocument.Retry.Steps.Select(step => new RetryStepDocument
                     {
                         Delay = step.Delay,

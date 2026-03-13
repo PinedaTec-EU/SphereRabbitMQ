@@ -492,8 +492,7 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
             steps,
             document.Enabled,
             document.AutoGenerateArtifacts,
-            document.ExchangeName,
-            document.ParkingLotQueueName);
+            document.ExchangeName);
     }
 
     private static ExchangeType ParseExchangeType(string value, string path, ICollection<TopologyIssue> issues)
@@ -551,7 +550,6 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
                 RetryQueueSuffix = document.RetryQueueSuffix ?? NamingConventionPolicy.Default.RetryQueueSuffix,
                 DeadLetterExchangeSuffix = document.DeadLetterExchangeSuffix ?? NamingConventionPolicy.Default.DeadLetterExchangeSuffix,
                 DeadLetterQueueSuffix = document.DeadLetterQueueSuffix ?? NamingConventionPolicy.Default.DeadLetterQueueSuffix,
-                ParkingLotQueueSuffix = document.ParkingLotQueueSuffix ?? NamingConventionPolicy.Default.ParkingLotQueueSuffix,
                 StepTokenPrefix = document.StepTokenPrefix ?? NamingConventionPolicy.Default.StepTokenPrefix,
             };
 

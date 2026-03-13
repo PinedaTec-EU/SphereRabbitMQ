@@ -147,7 +147,6 @@ public sealed class TopologyYamlParser : ITopologyParser
             : document with
             {
                 ExchangeName = ResolveOptional(document.ExchangeName, variables),
-                ParkingLotQueueName = ResolveOptional(document.ParkingLotQueueName, variables),
                 Steps = document.Steps.Select(step => step with
                 {
                     Delay = Resolve(step.Delay, variables),
@@ -169,7 +168,6 @@ public sealed class TopologyYamlParser : ITopologyParser
                 RetryQueueSuffix = ResolveOptional(document.RetryQueueSuffix, variables),
                 DeadLetterExchangeSuffix = ResolveOptional(document.DeadLetterExchangeSuffix, variables),
                 DeadLetterQueueSuffix = ResolveOptional(document.DeadLetterQueueSuffix, variables),
-                ParkingLotQueueSuffix = ResolveOptional(document.ParkingLotQueueSuffix, variables),
                 StepTokenPrefix = ResolveOptional(document.StepTokenPrefix, variables),
             };
 

@@ -14,7 +14,5 @@ public sealed record RetryDocument
 
     public string? ExchangeName { get; init; }
 
-    public string? ParkingLotQueueName { get; init; }
-
     public IReadOnlyList<RetryStepDocument> Steps { get; init; } = Array.Empty<RetryStepDocument>();
 }

@@ -201,7 +201,6 @@ public sealed record TopologyDefinition
 
         ValidateRetrySteps(queue.Name, retry, namingPolicy, path, generatedNames, issues);
         RegisterGeneratedName(retry.ExchangeName ?? namingPolicy.GetRetryExchangeName(queue.Name), path, generatedNames, issues);
-        RegisterGeneratedName(retry.ParkingLotQueueName ?? namingPolicy.GetParkingLotQueueName(queue.Name), path, generatedNames, issues);
     }
 
     private static void ValidateRetrySteps(

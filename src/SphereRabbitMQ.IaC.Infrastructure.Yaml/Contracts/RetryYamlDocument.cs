@@ -14,7 +14,5 @@ public sealed record RetryYamlDocument
 
     public string? ExchangeName { get; init; }
 
-    public string? ParkingLotQueueName { get; init; }
-
     public List<RetryStepYamlDocument> Steps { get; init; } = new();
 }

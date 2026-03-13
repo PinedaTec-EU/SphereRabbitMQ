@@ -11,8 +11,7 @@ public sealed record RetryDefinition
         IReadOnlyList<RetryStepDefinition> steps,
         bool enabled = true,
         bool autoGenerateArtifacts = true,
-        string? exchangeName = null,
-        string? parkingLotQueueName = null)
+        string? exchangeName = null)
     {
         Steps = Guard.AgainstNull(steps, nameof(steps));
         Enabled = enabled;
@@ -20,9 +19,6 @@ public sealed record RetryDefinition
         ExchangeName = string.IsNullOrWhiteSpace(exchangeName)
             ? null
             : Guard.AgainstNullOrWhiteSpace(exchangeName, nameof(exchangeName));
-        ParkingLotQueueName = string.IsNullOrWhiteSpace(parkingLotQueueName)
-            ? null
-            : Guard.AgainstNullOrWhiteSpace(parkingLotQueueName, nameof(parkingLotQueueName));
     }
 
     public IReadOnlyList<RetryStepDefinition> Steps { get; }
@@ -32,6 +28,4 @@ public sealed record RetryDefinition
     public bool AutoGenerateArtifacts { get; }
 
     public string? ExchangeName { get; }
-
-    public string? ParkingLotQueueName { get; }
 }

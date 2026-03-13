@@ -30,7 +30,6 @@ public sealed class TopologyYamlDocumentWriterTests
                 RetryQueueSuffix = "retry",
                 DeadLetterExchangeSuffix = "dlx",
                 DeadLetterQueueSuffix = "dlq",
-                ParkingLotQueueSuffix = "parking",
                 StepTokenPrefix = "step",
             },
             VirtualHosts =
@@ -87,7 +86,6 @@ public sealed class TopologyYamlDocumentWriterTests
                                 Enabled = true,
                                 AutoGenerateArtifacts = false,
                                 ExchangeName = "orders.retry",
-                                ParkingLotQueueName = "orders.parking",
                                 Steps =
                                 [
                                     new RetryStepDocument
@@ -144,7 +142,6 @@ public sealed class TopologyYamlDocumentWriterTests
         Assert.Contains("ttl: 00:05:00", yaml, StringComparison.Ordinal);
         Assert.Contains("retry:", yaml, StringComparison.Ordinal);
         Assert.Contains("autoGenerateArtifacts: false", yaml, StringComparison.Ordinal);
-        Assert.Contains("parkingLotQueueName: orders.parking", yaml, StringComparison.Ordinal);
         Assert.Contains("steps:", yaml, StringComparison.Ordinal);
         Assert.Contains("delay: 00:00:30", yaml, StringComparison.Ordinal);
         Assert.Contains("bindings:", yaml, StringComparison.Ordinal);

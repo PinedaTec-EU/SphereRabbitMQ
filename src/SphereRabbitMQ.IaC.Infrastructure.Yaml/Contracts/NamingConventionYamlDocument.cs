@@ -18,7 +18,5 @@ public sealed record NamingConventionYamlDocument
 
     public string? DeadLetterQueueSuffix { get; init; }
 
-    public string? ParkingLotQueueSuffix { get; init; }
-
     public string? StepTokenPrefix { get; init; }
 }

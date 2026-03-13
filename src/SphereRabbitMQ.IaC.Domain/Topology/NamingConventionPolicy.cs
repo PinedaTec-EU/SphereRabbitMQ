@@ -22,8 +22,6 @@ public sealed record NamingConventionPolicy
 
     public string DeadLetterQueueSuffix { get; init; } = "dlq";
 
-    public string ParkingLotQueueSuffix { get; init; } = "parking";
-
     public string StepTokenPrefix { get; init; } = "step";
 
     /// <summary>
@@ -49,12 +47,6 @@ public sealed record NamingConventionPolicy
     /// </summary>
     public string GetDeadLetterQueueName(string queueName)
         => Join(queueName, DeadLetterQueueSuffix);
-
-    /// <summary>
-    /// Returns a deterministic parking lot queue name for the specified queue.
-    /// </summary>
-    public string GetParkingLotQueueName(string queueName)
-        => Join(queueName, ParkingLotQueueSuffix);
 
     /// <summary>
     /// Returns a deterministic retry step token.
