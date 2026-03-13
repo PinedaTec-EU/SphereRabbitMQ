@@ -13,7 +13,7 @@
     <Description>Command-line entry point for RabbitMQ topology infrastructure as code.</Description>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>sprmq</ToolCommandName>
-    <PackageReadmeFile>../../README.md</PackageReadmeFile>
+    <PackageReadmeFile>cli.md</PackageReadmeFile>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>
 
@@ -26,8 +26,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="..\..\docs\cli.md" Pack="true" PackagePath="\" Link="README.md" />
-    <None Include="..\..\LICENSE.txt" Pack="true" PackagePath="\" Link="LICENSE.txt" />
+    <None Include="../../docs/cli.md" Pack="true" PackagePath="/" />
+    <None Include="../../LICENSE.txt" Pack="true" PackagePath="/" Link="LICENSE.txt" />
   </ItemGroup>
 
   <ItemGroup>
