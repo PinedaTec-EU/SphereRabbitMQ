@@ -1,7 +1,7 @@
 {
   "nuspecFile": ".nuspec",
   "nuspecTemplate": "package_en.template",
-  "currentVersion": "0.1.2.57",
+  "currentVersion": "0.1.2.58",
   "versionIncrease": "0.0.0.1",
   "solutionFile": "SphereRabbitMQ.slnx",
   "createNuspec": false,
