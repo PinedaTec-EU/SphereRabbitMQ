@@ -1,5 +1,3 @@
-using System.Reflection;
-
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
@@ -18,7 +16,7 @@ public sealed class RabbitMqRuntimeQueueMigrationMessageMoverTests
     }
 
     [Fact]
-    public async Task Constructor_UsesBaseUriHost_WhenAmqpHostNameIsMissing()
+    public void CreateServiceProvider_UsesBaseUriHost_WhenAmqpHostNameIsMissing()
     {
         var options = new RabbitMqManagementOptions
         {
@@ -30,12 +28,12 @@ public sealed class RabbitMqRuntimeQueueMigrationMessageMoverTests
             AmqpVirtualHost = "sales",
         };
 
-        await using var mover = new RabbitMqRuntimeQueueMigrationMessageMover(options);
-        var runtimeOptions = ResolveRuntimeOptions(mover);
+        using var provider = CreateServiceProvider(options, "tenant-a");
+        var runtimeOptions = provider.GetRequiredService<IOptions<SphereRabbitMqOptions>>().Value;
 
         Assert.Equal("rabbit.internal", runtimeOptions.HostName);
         Assert.Equal(5673, runtimeOptions.Port);
-        Assert.Equal("sales", runtimeOptions.VirtualHost);
+        Assert.Equal("tenant-a", runtimeOptions.VirtualHost);
         Assert.Equal("guest", runtimeOptions.UserName);
         Assert.Equal("guest", runtimeOptions.Password);
         Assert.False(runtimeOptions.ValidateTopologyOnStartup);
@@ -43,7 +41,7 @@ public sealed class RabbitMqRuntimeQueueMigrationMessageMoverTests
     }
 
     [Fact]
-    public async Task Constructor_UsesAmqpHostNameOverride_WhenProvided()
+    public void CreateServiceProvider_UsesAmqpHostNameOverride_WhenProvided()
     {
         var options = new RabbitMqManagementOptions
         {
@@ -55,19 +53,20 @@ public sealed class RabbitMqRuntimeQueueMigrationMessageMoverTests
             AmqpVirtualHost = "/",
         };
 
-        await using var mover = new RabbitMqRuntimeQueueMigrationMessageMover(options);
-        var runtimeOptions = ResolveRuntimeOptions(mover);
+        using var provider = CreateServiceProvider(options, "tenant-b");
+        var runtimeOptions = provider.GetRequiredService<IOptions<SphereRabbitMqOptions>>().Value;
 
         Assert.Equal("override-host", runtimeOptions.HostName);
+        Assert.Equal("tenant-b", runtimeOptions.VirtualHost);
     }
 
-    private static SphereRabbitMqOptions ResolveRuntimeOptions(RabbitMqRuntimeQueueMigrationMessageMover mover)
+    private static ServiceProvider CreateServiceProvider(RabbitMqManagementOptions options, string virtualHostName)
     {
-        var providerField = typeof(RabbitMqRuntimeQueueMigrationMessageMover)
-            .GetField("_serviceProvider", BindingFlags.NonPublic | BindingFlags.Instance);
-        Assert.NotNull(providerField);
+        var mover = new RabbitMqRuntimeQueueMigrationMessageMover(options);
+        var factoryMethod = typeof(RabbitMqRuntimeQueueMigrationMessageMover)
+            .GetMethod("CreateServiceProvider", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(factoryMethod);
 
-        var provider = (ServiceProvider)providerField!.GetValue(mover)!;
-        return provider.GetRequiredService<IOptions<SphereRabbitMqOptions>>().Value;
+        return (ServiceProvider)factoryMethod!.Invoke(mover, [virtualHostName])!;
     }
 }
