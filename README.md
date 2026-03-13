@@ -81,8 +81,10 @@ If any expected topology is missing, the runtime fails explicitly with a diagnos
 2. Scaffold a starting YAML with `sprmq init` or reuse `samples/templates/`.
 3. Define or adapt the topology in YAML.
 4. Apply it with `sprmq`.
-5. Start application code with `SphereRabbitMQ`.
-6. Publish and consume only against pre-existing broker resources.
+5. Optionally bootstrap from a live broker with `sprmq export --include-broker`.
+6. Enable shell completions with `sprmq completion <bash|zsh|pwsh>`.
+7. Start application code with `SphereRabbitMQ`.
+8. Publish and consume only against pre-existing broker resources.
 
 ## Runtime Error Model
 

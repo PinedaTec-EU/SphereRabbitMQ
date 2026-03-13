@@ -64,6 +64,33 @@ public sealed class TopologyCommandHandlerAdditionalTests
     }
 
     [Fact]
+    public async Task CompletionAsync_WritesBashScript()
+    {
+        var outputWriterMock = new Mock<ICommandOutputWriter>(MockBehavior.Strict);
+        var templateCatalogMock = new Mock<ITopologyTemplateCatalog>(MockBehavior.Strict);
+
+        templateCatalogMock.Setup(catalog => catalog.GetTemplateNames()).Returns(["debug", "minimal", "retry"]);
+        outputWriterMock.Setup(writer => writer.WriteText(It.IsAny<string>()));
+
+        var handler = CreateHandler(
+            Mock.Of<ITopologyParser>(),
+            Mock.Of<ITopologyNormalizer>(),
+            Mock.Of<ITopologyValidator>(),
+            Mock.Of<IRabbitMqRuntimeServiceFactory>(),
+            Mock.Of<ITopologyDocumentWriter>(),
+            outputWriterMock.Object,
+            templateCatalogMock.Object);
+
+        var exitCode = await handler.CompletionAsync("bash", CancellationToken.None);
+
+        Assert.Equal(CommandExitCodes.Success, exitCode);
+        outputWriterMock.Verify(writer => writer.WriteText(It.Is<string>(text =>
+            text.Contains("complete -F _sprmq_completion sprmq", StringComparison.Ordinal) &&
+            text.Contains("--template", StringComparison.Ordinal) &&
+            text.Contains("minimal", StringComparison.Ordinal))), Times.Once);
+    }
+
+    [Fact]
     public async Task ValidateAsync_WithJsonOutput_WritesJsonOnly()
     {
         var parserMock = new Mock<ITopologyParser>(MockBehavior.Strict);
@@ -381,7 +408,7 @@ public sealed class TopologyRootCommandFactoryTests
 
         var rootCommand = TopologyRootCommandFactory.Create(services);
 
-        Assert.Equal(["init", "validate", "plan", "apply", "destroy", "export"], rootCommand.Subcommands.Select(command => command.Name).ToArray());
+        Assert.Equal(["init", "validate", "plan", "apply", "destroy", "export", "completion"], rootCommand.Subcommands.Select(command => command.Name).ToArray());
         Assert.True(GetCommand(rootCommand, "validate").Options.OfType<Option<string>>().Single(option => option.Name == "file").IsRequired);
         Assert.Contains(GetCommand(rootCommand, "apply").Options, option => option.Name == "migrate");
         Assert.Contains(GetCommand(rootCommand, "destroy").Options, option => option.Name == "allow-destructive");
@@ -494,6 +521,29 @@ public sealed class TopologyRootCommandFactoryTests
 
         Assert.Equal(CommandExitCodes.Success, exitCode);
         topologyDocumentWriterMock.VerifyAll();
+    }
+
+    [Fact]
+    public async Task Create_InvokedCompletionCommand_WritesZshScript()
+    {
+        var outputWriterMock = new Mock<ICommandOutputWriter>(MockBehavior.Strict);
+        var templateCatalogMock = new Mock<ITopologyTemplateCatalog>(MockBehavior.Strict);
+
+        templateCatalogMock.Setup(catalog => catalog.GetTemplateNames()).Returns(["minimal", "retry"]);
+        outputWriterMock.Setup(writer => writer.WriteText(It.IsAny<string>()));
+
+        using var services = new ServiceCollection()
+            .AddSingleton<ITopologyTemplateCatalog>(templateCatalogMock.Object)
+            .AddSingleton(CreateHandler(outputWriter: outputWriterMock.Object, templateCatalog: templateCatalogMock.Object))
+            .BuildServiceProvider();
+
+        var rootCommand = TopologyRootCommandFactory.Create(services);
+        var exitCode = await rootCommand.InvokeAsync(["completion", "zsh"]);
+
+        Assert.Equal(CommandExitCodes.Success, exitCode);
+        outputWriterMock.Verify(writer => writer.WriteText(It.Is<string>(text =>
+            text.Contains("bashcompinit", StringComparison.Ordinal) &&
+            text.Contains("complete -F _sprmq_completion sprmq", StringComparison.Ordinal))), Times.Once);
     }
 
     [Fact]

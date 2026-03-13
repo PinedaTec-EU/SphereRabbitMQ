@@ -184,6 +184,25 @@ Reads current broker topology and exports it as YAML.
 
 `--include-broker` makes the export bootstrap-friendly for developers by persisting the resolved broker section into the YAML output.
 
+### `completion`
+
+Prints a shell completion script for `bash`, `zsh`, or `pwsh`.
+
+Examples:
+
+```bash
+sprmq completion bash
+sprmq completion zsh
+sprmq completion pwsh
+```
+
+Typical usage:
+
+```bash
+sprmq completion bash >> ~/.bashrc
+sprmq completion zsh >> ~/.zshrc
+```
+
 ## Broker Configuration Resolution
 
 Broker connection values are resolved in this order:

@@ -91,6 +91,23 @@ internal sealed class TopologyCommandHandler
         }
     }
 
+    public Task<int> CompletionAsync(string shell, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        try
+        {
+            var script = ShellCompletionScriptRenderer.Render(shell, _topologyTemplateCatalog.GetTemplateNames());
+            _commandOutputWriter.WriteText(script);
+            return Task.FromResult(CommandExitCodes.Success);
+        }
+        catch (Exception exception)
+        {
+            WriteError(TopologyOutputFormat.Text, "completion", exception);
+            return Task.FromResult(CommandExitCodes.ExecutionFailed);
+        }
+    }
+
     public async Task<int> ValidateAsync(
         string filePath,
         TopologyOutputFormat outputFormat,

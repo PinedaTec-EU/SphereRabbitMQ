@@ -21,6 +21,7 @@ internal static class TopologyRootCommandFactory
           apply     Apply only safe reconciliation operations. Refuses destructive changes.
           destroy   Intentionally delete declared topology resources. Requires --allow-destructive unless used with --dry-run.
           export    Export broker topology to YAML.
+          completion  Print shell completion scripts.
 
         Examples:
           sprmq init --template minimal --output-file topology.yaml
@@ -29,6 +30,7 @@ internal static class TopologyRootCommandFactory
           sprmq destroy --file samples/minimal-topology.yaml --dry-run
           sprmq destroy --file samples/minimal-topology.yaml --allow-destructive
           sprmq destroy --file samples/minimal-topology.yaml --allow-destructive --destroy-vhost
+          sprmq completion zsh
         """;
     private const string InitDescription = """
         Create a topology YAML file from a built-in template.
@@ -75,6 +77,12 @@ internal static class TopologyRootCommandFactory
           sprmq export --file samples/minimal-topology.yaml --output-file topology.yaml
           sprmq export --include-broker --output-file topology.yaml
         """;
+    private const string CompletionDescription = """
+        Print shell completion scripts for bash, zsh, or pwsh.
+
+        Example:
+          sprmq completion bash
+        """;
 
     internal static RootCommand Create(IServiceProvider serviceProvider)
     {
@@ -98,6 +106,7 @@ internal static class TopologyRootCommandFactory
         var exportOutputPathOption = new Option<string>("--output-file", () => "-", "Output file path for export. Use '-' to write YAML to stdout.");
         var exportFileOption = new Option<string?>("--file", "Optional topology YAML file used as a source for broker connection settings.");
         var includeBrokerOption = new Option<bool>("--include-broker", () => false, "Include the resolved broker settings in the exported YAML.");
+        var shellArgument = new Argument<string>("shell", "Target shell: bash, zsh, or pwsh.");
 
         var rootCommand = new RootCommand("SphereRabbitMQ.IaC")
         {
@@ -228,6 +237,10 @@ internal static class TopologyRootCommandFactory
         {
             Description = ExportDescription,
         };
+        var completionCommand = new Command("completion")
+        {
+            Description = CompletionDescription,
+        };
         exportCommand.AddOption(exportFileOption);
         exportCommand.AddOption(outputFormatOption);
         exportCommand.AddOption(managementUrlOption);
@@ -252,12 +265,24 @@ internal static class TopologyRootCommandFactory
             context.ExitCode = exitCode;
         });
 
+        completionCommand.AddArgument(shellArgument);
+        Handler.SetHandler(completionCommand, async (InvocationContext context) =>
+        {
+            var parseResult = context.ParseResult;
+            var cancellationToken = context.GetCancellationToken();
+            var exitCode = await handler.CompletionAsync(
+                parseResult.GetValueForArgument(shellArgument)!,
+                cancellationToken);
+            context.ExitCode = exitCode;
+        });
+
         rootCommand.AddCommand(initCommand);
         rootCommand.AddCommand(validateCommand);
         rootCommand.AddCommand(planCommand);
         rootCommand.AddCommand(applyCommand);
         rootCommand.AddCommand(destroyCommand);
         rootCommand.AddCommand(exportCommand);
+        rootCommand.AddCommand(completionCommand);
 
         return rootCommand;
     }
