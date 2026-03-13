@@ -10,6 +10,8 @@ internal sealed record RabbitMqIntegrationTestSettings(
     int AmqpPort,
     string AmqpVirtualHost)
 {
+    private const int DefaultAmqpPort = 5672;
+    private const int DefaultManagementPort = 15672;
     private const string BaseUriVariable = "SPHERE_RABBITMQ_MANAGEMENT_URL";
     private const string UsernameVariable = "SPHERE_RABBITMQ_USERNAME";
     private const string PasswordVariable = "SPHERE_RABBITMQ_PASSWORD";
@@ -41,7 +43,7 @@ internal sealed record RabbitMqIntegrationTestSettings(
             username,
             password,
             string.IsNullOrWhiteSpace(amqpHostName) ? null : amqpHostName,
-            int.TryParse(amqpPortRaw, out var amqpPort) ? amqpPort : DeriveAmqpPort(new Uri(baseUri, UriKind.Absolute)),
+            ResolveAmqpPort(amqpPortRaw, new Uri(baseUri, UriKind.Absolute)),
             string.IsNullOrWhiteSpace(amqpVirtualHost) ? "/" : amqpVirtualHost);
         return true;
     }
@@ -56,19 +58,20 @@ internal sealed record RabbitMqIntegrationTestSettings(
         throw new InvalidOperationException("RabbitMQ integration test settings are not configured.");
     }
 
-    private static int DeriveAmqpPort(Uri managementUri)
+    private static int ResolveAmqpPort(string? amqpPortRaw, Uri managementUri)
     {
-        if (managementUri.Port == 15672)
+        if (int.TryParse(amqpPortRaw, out var configuredPort))
         {
-            return 5672;
+            return configuredPort;
         }
 
-        var managementPort = managementUri.Port.ToString();
-        if (managementPort.EndsWith("1672", StringComparison.Ordinal) && managementPort.Length > 4)
+        if (managementUri.Port == DefaultManagementPort)
         {
-            return int.Parse($"{managementPort[..^4]}5672");
+            return DefaultAmqpPort;
         }
 
-        return 5672;
+        throw new InvalidOperationException(
+            $"Unable to infer AMQP port from {BaseUriVariable}='{managementUri}'. " +
+            $"Set {AmqpPortVariable} explicitly when RabbitMQ management is exposed on a non-default port.");
     }
 }

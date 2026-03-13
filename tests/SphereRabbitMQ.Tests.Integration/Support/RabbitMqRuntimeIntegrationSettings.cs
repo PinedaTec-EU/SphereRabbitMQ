@@ -9,6 +9,8 @@ internal sealed record RabbitMqRuntimeIntegrationSettings(
     string Password,
     string VirtualHost)
 {
+    private const int DefaultAmqpPort = 5672;
+    private const int DefaultManagementPort = 15672;
     private const string BaseUriVariable = "SPHERE_RABBITMQ_MANAGEMENT_URL";
     private const string UsernameVariable = "SPHERE_RABBITMQ_USERNAME";
     private const string PasswordVariable = "SPHERE_RABBITMQ_PASSWORD";
@@ -41,9 +43,7 @@ internal sealed record RabbitMqRuntimeIntegrationSettings(
 
         var baseUri = string.IsNullOrWhiteSpace(managementUrl) ? null : new Uri(managementUrl, UriKind.Absolute);
         var hostName = string.IsNullOrWhiteSpace(amqpHostName) ? baseUri!.Host : amqpHostName;
-        var port = int.TryParse(amqpPortRaw, out var configuredPort)
-            ? configuredPort
-            : baseUri is null ? 5672 : DeriveAmqpPort(baseUri);
+        var port = ResolveAmqpPort(amqpPortRaw, baseUri);
 
         settings = new RabbitMqRuntimeIntegrationSettings(
             hostName,
@@ -54,19 +54,20 @@ internal sealed record RabbitMqRuntimeIntegrationSettings(
         return true;
     }
 
-    private static int DeriveAmqpPort(Uri managementUri)
+    private static int ResolveAmqpPort(string? amqpPortRaw, Uri? managementUri)
     {
-        if (managementUri.Port == 15672)
+        if (int.TryParse(amqpPortRaw, out var configuredPort))
         {
-            return 5672;
+            return configuredPort;
         }
 
-        var managementPort = managementUri.Port.ToString();
-        if (managementPort.EndsWith("1672", StringComparison.Ordinal) && managementPort.Length > 4)
+        if (managementUri is null || managementUri.Port == DefaultManagementPort)
         {
-            return int.Parse($"{managementPort[..^4]}5672");
+            return DefaultAmqpPort;
         }
 
-        return 5672;
+        throw new InvalidOperationException(
+            $"Unable to infer AMQP port from {BaseUriVariable}='{managementUri}'. " +
+            $"Set {AmqpPortVariable} explicitly when RabbitMQ management is exposed on a non-default port.");
     }
 }
