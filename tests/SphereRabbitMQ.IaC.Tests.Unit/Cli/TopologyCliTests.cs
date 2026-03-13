@@ -12,6 +12,7 @@ using SphereRabbitMQ.IaC.Cli;
 using SphereRabbitMQ.IaC.Cli.Commands;
 using SphereRabbitMQ.IaC.Cli.Commands.Interfaces;
 using SphereRabbitMQ.IaC.Cli.Commands.Models;
+using SphereRabbitMQ.IaC.Cli.Templates.Interfaces;
 using SphereRabbitMQ.IaC.Domain.Planning;
 using SphereRabbitMQ.IaC.Domain.Topology;
 using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Configuration;
@@ -63,7 +64,8 @@ public sealed class TopologyCliTests
             topologyValidatorMock.Object,
             runtimeFactoryMock.Object,
             topologyDocumentWriterMock.Object,
-            commandOutputWriterMock.Object);
+            commandOutputWriterMock.Object,
+            Mock.Of<ITopologyTemplateCatalog>());
 
         var exitCode = await handler.DestroyAsync(
             "does-not-matter.yaml",
@@ -136,7 +138,8 @@ public sealed class TopologyCliTests
                 topologyValidatorMock.Object,
                 runtimeFactoryMock.Object,
                 topologyDocumentWriterMock.Object,
-                commandOutputWriterMock.Object);
+                commandOutputWriterMock.Object,
+                Mock.Of<ITopologyTemplateCatalog>());
 
             var exitCode = await handler.DestroyAsync(
                 filePath,
@@ -225,7 +228,8 @@ public sealed class TopologyCliTests
                 topologyValidatorMock.Object,
                 runtimeFactoryMock.Object,
                 topologyDocumentWriterMock.Object,
-                commandOutputWriterMock.Object);
+                commandOutputWriterMock.Object,
+                Mock.Of<ITopologyTemplateCatalog>());
 
             var exitCode = await handler.ApplyAsync(
                 filePath,
@@ -284,7 +288,8 @@ public sealed class TopologyCliTests
                 topologyValidatorMock.Object,
                 runtimeFactoryMock.Object,
                 topologyDocumentWriterMock.Object,
-                commandOutputWriterMock.Object);
+                commandOutputWriterMock.Object,
+                Mock.Of<ITopologyTemplateCatalog>());
 
             var exitCode = await handler.ApplyAsync(
                 filePath,
@@ -383,7 +388,8 @@ public sealed class TopologyCliTests
                 topologyValidatorMock.Object,
                 runtimeFactoryMock.Object,
                 topologyDocumentWriterMock.Object,
-                commandOutputWriterMock.Object);
+                commandOutputWriterMock.Object,
+                Mock.Of<ITopologyTemplateCatalog>());
 
             var exitCode = await handler.ApplyAsync(
                 filePath,
@@ -442,7 +448,8 @@ public sealed class TopologyCliTests
                 topologyValidatorMock.Object,
                 runtimeFactoryMock.Object,
                 topologyDocumentWriterMock.Object,
-                commandOutputWriterMock.Object);
+                commandOutputWriterMock.Object,
+                Mock.Of<ITopologyTemplateCatalog>());
 
             var exitCode = await handler.ApplyAsync(
                 filePath,

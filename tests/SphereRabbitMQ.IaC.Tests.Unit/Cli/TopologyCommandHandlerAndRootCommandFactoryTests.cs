@@ -15,6 +15,7 @@ using SphereRabbitMQ.IaC.Application.Workflows.Interfaces;
 using SphereRabbitMQ.IaC.Cli.Commands;
 using SphereRabbitMQ.IaC.Cli.Commands.Interfaces;
 using SphereRabbitMQ.IaC.Cli.Commands.Models;
+using SphereRabbitMQ.IaC.Cli.Templates.Interfaces;
 using SphereRabbitMQ.IaC.Domain.Planning;
 using SphereRabbitMQ.IaC.Domain.Topology;
 using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Configuration;
@@ -26,6 +27,42 @@ namespace SphereRabbitMQ.IaC.Tests.Unit.Cli;
 
 public sealed class TopologyCommandHandlerAdditionalTests
 {
+    [Fact]
+    public async Task InitAsync_WritesSelectedTemplate_ToOutputFile()
+    {
+        var outputWriterMock = new Mock<ICommandOutputWriter>(MockBehavior.Strict);
+        var templateCatalogMock = new Mock<ITopologyTemplateCatalog>(MockBehavior.Strict);
+        var outputPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.yaml");
+
+        try
+        {
+            templateCatalogMock.Setup(catalog => catalog.GetTemplateContent("retry")).Returns("virtualHosts:\n  - name: sales\n");
+            templateCatalogMock.Setup(catalog => catalog.GetTemplateNames()).Returns(["debug", "minimal", "quorum", "retry", "retry-dead-letter", "topic-routing"]);
+            outputWriterMock.Setup(writer => writer.WriteText(It.IsAny<string>()));
+
+            var handler = CreateHandler(
+                Mock.Of<ITopologyParser>(),
+                Mock.Of<ITopologyNormalizer>(),
+                Mock.Of<ITopologyValidator>(),
+                Mock.Of<IRabbitMqRuntimeServiceFactory>(),
+                Mock.Of<ITopologyDocumentWriter>(),
+                outputWriterMock.Object,
+                templateCatalogMock.Object);
+
+            var exitCode = await handler.InitAsync("retry", outputPath, false, CancellationToken.None);
+
+            Assert.Equal(CommandExitCodes.Success, exitCode);
+            Assert.Equal("virtualHosts:\n  - name: sales\n", await File.ReadAllTextAsync(outputPath));
+        }
+        finally
+        {
+            if (File.Exists(outputPath))
+            {
+                File.Delete(outputPath);
+            }
+        }
+    }
+
     [Fact]
     public async Task ValidateAsync_WithJsonOutput_WritesJsonOnly()
     {
@@ -246,14 +283,24 @@ public sealed class TopologyCommandHandlerAdditionalTests
         ITopologyValidator validator,
         IRabbitMqRuntimeServiceFactory runtimeFactory,
         ITopologyDocumentWriter documentWriter,
-        ICommandOutputWriter outputWriter)
+        ICommandOutputWriter outputWriter,
+        ITopologyTemplateCatalog? templateCatalog = null)
         => new(
             parser,
             normalizer,
             validator,
             runtimeFactory,
             documentWriter,
-            outputWriter);
+            outputWriter,
+            templateCatalog ?? CreateTemplateCatalog());
+
+    private static ITopologyTemplateCatalog CreateTemplateCatalog()
+    {
+        var templateCatalogMock = new Mock<ITopologyTemplateCatalog>(MockBehavior.Strict);
+        templateCatalogMock.Setup(catalog => catalog.GetTemplateNames()).Returns(["debug", "minimal", "quorum", "retry", "retry-dead-letter", "topic-routing"]);
+        templateCatalogMock.Setup(catalog => catalog.GetTemplateContent("minimal")).Returns("virtualHosts:\n  - name: sales\n");
+        return templateCatalogMock.Object;
+    }
 
     private static RabbitMqRuntimeServices CreateRuntimeServices(ITopologyWorkflowService workflowService)
         => new(
@@ -277,12 +324,13 @@ public sealed class TopologyRootCommandFactoryTests
     public void Create_RegistersExpectedCommandsAndOptions()
     {
         using var services = new ServiceCollection()
+            .AddSingleton<ITopologyTemplateCatalog>(CreateTemplateCatalog())
             .AddSingleton(CreateHandler())
             .BuildServiceProvider();
 
         var rootCommand = TopologyRootCommandFactory.Create(services);
 
-        Assert.Equal(["validate", "plan", "apply", "destroy", "export"], rootCommand.Subcommands.Select(command => command.Name).ToArray());
+        Assert.Equal(["init", "validate", "plan", "apply", "destroy", "export"], rootCommand.Subcommands.Select(command => command.Name).ToArray());
         Assert.True(GetCommand(rootCommand, "validate").Options.OfType<Option<string>>().Single(option => option.Name == "file").IsRequired);
         Assert.Contains(GetCommand(rootCommand, "apply").Options, option => option.Name == "migrate");
         Assert.Contains(GetCommand(rootCommand, "destroy").Options, option => option.Name == "allow-destructive");
@@ -314,6 +362,7 @@ public sealed class TopologyRootCommandFactoryTests
         outputWriterMock.Setup(writer => writer.WriteJson(It.IsAny<ExportCommandResult>()));
 
         using var services = new ServiceCollection()
+            .AddSingleton<ITopologyTemplateCatalog>(CreateTemplateCatalog())
             .AddSingleton(CreateHandler(
                 Mock.Of<ITopologyParser>(),
                 Mock.Of<ITopologyNormalizer>(),
@@ -342,6 +391,43 @@ public sealed class TopologyRootCommandFactoryTests
     }
 
     [Fact]
+    public async Task Create_InvokedInitCommand_WritesTemplateToRequestedFile()
+    {
+        var outputWriterMock = new Mock<ICommandOutputWriter>(MockBehavior.Strict);
+        var templateCatalogMock = new Mock<ITopologyTemplateCatalog>(MockBehavior.Strict);
+        var outputPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.yaml");
+
+        try
+        {
+            templateCatalogMock.Setup(catalog => catalog.GetTemplateNames()).Returns(["minimal"]);
+            templateCatalogMock.Setup(catalog => catalog.GetTemplateContent("minimal")).Returns("virtualHosts:\n  - name: sales\n");
+            outputWriterMock.Setup(writer => writer.WriteText(It.IsAny<string>()));
+
+            using var services = new ServiceCollection()
+                .AddSingleton<ITopologyTemplateCatalog>(templateCatalogMock.Object)
+                .AddSingleton(CreateHandler(outputWriter: outputWriterMock.Object, templateCatalog: templateCatalogMock.Object))
+                .BuildServiceProvider();
+
+            var rootCommand = TopologyRootCommandFactory.Create(services);
+            var exitCode = await rootCommand.InvokeAsync([
+                "init",
+                "--template", "minimal",
+                "--output-file", outputPath,
+            ]);
+
+            Assert.Equal(CommandExitCodes.Success, exitCode);
+            Assert.Equal("virtualHosts:\n  - name: sales\n", await File.ReadAllTextAsync(outputPath));
+        }
+        finally
+        {
+            if (File.Exists(outputPath))
+            {
+                File.Delete(outputPath);
+            }
+        }
+    }
+
+    [Fact]
     public async Task Create_InvokedValidateCommand_ExecutesValidateHandlerLambda()
     {
         var parserMock = new Mock<ITopologyParser>(MockBehavior.Strict);
@@ -364,6 +450,7 @@ public sealed class TopologyRootCommandFactoryTests
             outputWriterMock.Setup(writer => writer.WriteJson(It.IsAny<ValidateCommandResult>()));
 
             using var services = new ServiceCollection()
+                .AddSingleton<ITopologyTemplateCatalog>(CreateTemplateCatalog())
                 .AddSingleton(CreateHandler(
                     parserMock.Object,
                     normalizerMock.Object,
@@ -427,6 +514,7 @@ public sealed class TopologyRootCommandFactoryTests
             outputWriterMock.Setup(writer => writer.WriteText(It.IsAny<string>()));
 
             using var services = new ServiceCollection()
+                .AddSingleton<ITopologyTemplateCatalog>(CreateTemplateCatalog())
                 .AddSingleton(CreateHandler(
                     parserMock.Object,
                     Mock.Of<ITopologyNormalizer>(),
@@ -506,6 +594,7 @@ public sealed class TopologyRootCommandFactoryTests
             outputWriterMock.Setup(writer => writer.WriteText(It.IsAny<string>()));
 
             using var services = new ServiceCollection()
+                .AddSingleton<ITopologyTemplateCatalog>(CreateTemplateCatalog())
                 .AddSingleton(CreateHandler(
                     parserMock.Object,
                     Mock.Of<ITopologyNormalizer>(),
@@ -564,6 +653,7 @@ public sealed class TopologyRootCommandFactoryTests
             outputWriterMock.Setup(writer => writer.WriteText(It.IsAny<string>()));
 
             using var services = new ServiceCollection()
+                .AddSingleton<ITopologyTemplateCatalog>(CreateTemplateCatalog())
                 .AddSingleton(CreateHandler(
                     parserMock.Object,
                     Mock.Of<ITopologyNormalizer>(),
@@ -599,14 +689,24 @@ public sealed class TopologyRootCommandFactoryTests
         ITopologyValidator? validator = null,
         IRabbitMqRuntimeServiceFactory? runtimeFactory = null,
         ITopologyDocumentWriter? documentWriter = null,
-        ICommandOutputWriter? outputWriter = null)
+        ICommandOutputWriter? outputWriter = null,
+        ITopologyTemplateCatalog? templateCatalog = null)
         => new(
             parser ?? Mock.Of<ITopologyParser>(),
             normalizer ?? Mock.Of<ITopologyNormalizer>(),
             validator ?? Mock.Of<ITopologyValidator>(),
             runtimeFactory ?? Mock.Of<IRabbitMqRuntimeServiceFactory>(),
             documentWriter ?? Mock.Of<ITopologyDocumentWriter>(),
-            outputWriter ?? Mock.Of<ICommandOutputWriter>());
+            outputWriter ?? Mock.Of<ICommandOutputWriter>(),
+            templateCatalog ?? CreateTemplateCatalog());
+
+    private static ITopologyTemplateCatalog CreateTemplateCatalog()
+    {
+        var templateCatalogMock = new Mock<ITopologyTemplateCatalog>(MockBehavior.Strict);
+        templateCatalogMock.Setup(catalog => catalog.GetTemplateNames()).Returns(["debug", "minimal", "quorum", "retry", "retry-dead-letter", "topic-routing"]);
+        templateCatalogMock.Setup(catalog => catalog.GetTemplateContent("minimal")).Returns("virtualHosts:\n  - name: sales\n");
+        return templateCatalogMock.Object;
+    }
 
     private static RabbitMqRuntimeServices CreateRuntimeServices(ITopologyWorkflowService workflowService)
         => new(

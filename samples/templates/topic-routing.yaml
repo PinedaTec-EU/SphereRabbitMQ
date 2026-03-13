@@ -1,0 +1,21 @@
+virtualHosts:
+  - name: sales
+    exchanges:
+      - name: orders
+        type: topic
+      - name: billing
+        type: topic
+    queues:
+      - name: orders.created
+        type: quorum
+      - name: orders.paid
+        type: quorum
+    bindings:
+      - sourceExchange: orders
+        destination: orders.created
+        destinationType: queue
+        routingKey: orders.created
+      - sourceExchange: billing
+        destination: orders.paid
+        destinationType: queue
+        routingKey: orders.paid

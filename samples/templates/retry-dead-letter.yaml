@@ -1,0 +1,20 @@
+virtualHosts:
+  - name: sales
+    exchanges:
+      - name: orders
+        type: topic
+    queues:
+      - name: orders.created
+        type: quorum
+        retry:
+          enabled: true
+          steps:
+            - delay: "00:00:30"
+            - delay: "00:05:00"
+        deadLetter:
+          enabled: true
+    bindings:
+      - sourceExchange: orders
+        destination: orders.created
+        destinationType: queue
+        routingKey: orders.created

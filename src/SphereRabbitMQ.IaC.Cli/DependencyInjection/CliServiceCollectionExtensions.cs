@@ -1,6 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
 using SphereRabbitMQ.IaC.Cli.Commands;
 using SphereRabbitMQ.IaC.Cli.Commands.Interfaces;
+using SphereRabbitMQ.IaC.Cli.Templates;
+using SphereRabbitMQ.IaC.Cli.Templates.Interfaces;
 using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.DependencyInjection;
 using SphereRabbitMQ.IaC.Infrastructure.Yaml.DependencyInjection;
 
@@ -21,6 +23,7 @@ public static class CliServiceCollectionExtensions
         services.AddYamlInfrastructure();
         services.AddRabbitMqInfrastructure();
         services.AddSingleton<ICommandOutputWriter, CommandOutputWriter>();
+        services.AddSingleton<ITopologyTemplateCatalog, TopologyTemplateCatalog>();
         services.AddSingleton<TopologyCommandHandler>();
         return services;
     }

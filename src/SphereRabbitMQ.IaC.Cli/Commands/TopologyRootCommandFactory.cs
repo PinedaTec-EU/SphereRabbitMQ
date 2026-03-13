@@ -5,6 +5,7 @@ using System.CommandLine.Parsing;
 using Microsoft.Extensions.DependencyInjection;
 
 using SphereRabbitMQ.IaC.Cli.Commands.Models;
+using SphereRabbitMQ.IaC.Cli.Templates.Interfaces;
 
 namespace SphereRabbitMQ.IaC.Cli.Commands;
 
@@ -15,17 +16,25 @@ internal static class TopologyRootCommandFactory
 
         Commands:
           validate  Validate topology files without contacting RabbitMQ.
+          init      Create a topology YAML template.
           plan      Compare desired topology with the broker. Never changes broker state.
           apply     Apply only safe reconciliation operations. Refuses destructive changes.
           destroy   Intentionally delete declared topology resources. Requires --allow-destructive unless used with --dry-run.
           export    Export broker topology to YAML.
 
         Examples:
+          sprmq init --template minimal --output-file topology.yaml
           sprmq plan --file samples/minimal-topology.yaml
           sprmq apply --file samples/minimal-topology.yaml --dry-run
           sprmq destroy --file samples/minimal-topology.yaml --dry-run
           sprmq destroy --file samples/minimal-topology.yaml --allow-destructive
           sprmq destroy --file samples/minimal-topology.yaml --allow-destructive --destroy-vhost
+        """;
+    private const string InitDescription = """
+        Create a topology YAML file from a built-in template.
+
+        Example:
+          sprmq init --template retry-dead-letter --output-file topology.yaml
         """;
     private const string ValidateDescription = """
         Validate topology YAML syntax, normalization, and semantic consistency.
@@ -69,8 +78,12 @@ internal static class TopologyRootCommandFactory
     internal static RootCommand Create(IServiceProvider serviceProvider)
     {
         var handler = serviceProvider.GetRequiredService<TopologyCommandHandler>();
+        var templateCatalog = serviceProvider.GetRequiredService<ITopologyTemplateCatalog>();
 
         var fileOption = new Option<string>("--file") { IsRequired = true, Description = "Path to the topology YAML file." };
+        var templateOption = new Option<string>("--template", () => "minimal", $"Template name. Available: {string.Join(", ", templateCatalog.GetTemplateNames())}.");
+        var initOutputPathOption = new Option<string>("--output-file", () => "-", "Output file path for init. Use '-' to write YAML to stdout.");
+        var forceOption = new Option<bool>("--force", () => false, "Overwrite the output file when it already exists.");
         var outputFormatOption = new Option<TopologyOutputFormat>("--output", () => TopologyOutputFormat.Text, "Output format: text or json.");
         var managementUrlOption = new Option<string?>("--management-url", "RabbitMQ Management API URL.");
         var usernameOption = new Option<string?>("--username", "RabbitMQ username.");
@@ -88,6 +101,25 @@ internal static class TopologyRootCommandFactory
         {
             Description = RootDescription,
         };
+
+        var initCommand = new Command("init")
+        {
+            Description = InitDescription,
+        };
+        initCommand.AddOption(templateOption);
+        initCommand.AddOption(initOutputPathOption);
+        initCommand.AddOption(forceOption);
+        Handler.SetHandler(initCommand, async (InvocationContext context) =>
+        {
+            var parseResult = context.ParseResult;
+            var cancellationToken = context.GetCancellationToken();
+            var exitCode = await handler.InitAsync(
+                parseResult.GetValueForOption(templateOption)!,
+                parseResult.GetValueForOption(initOutputPathOption)!,
+                parseResult.GetValueForOption(forceOption),
+                cancellationToken);
+            context.ExitCode = exitCode;
+        });
 
         var validateCommand = new Command("validate")
         {
@@ -216,6 +248,7 @@ internal static class TopologyRootCommandFactory
             context.ExitCode = exitCode;
         });
 
+        rootCommand.AddCommand(initCommand);
         rootCommand.AddCommand(validateCommand);
         rootCommand.AddCommand(planCommand);
         rootCommand.AddCommand(applyCommand);

@@ -8,6 +8,7 @@ using SphereRabbitMQ.IaC.Application.Parsing.Interfaces;
 using SphereRabbitMQ.IaC.Application.Validation.Interfaces;
 using SphereRabbitMQ.IaC.Cli.Commands.Interfaces;
 using SphereRabbitMQ.IaC.Cli.Commands.Models;
+using SphereRabbitMQ.IaC.Cli.Templates.Interfaces;
 using SphereRabbitMQ.IaC.Domain.Planning;
 using SphereRabbitMQ.IaC.Domain.Topology;
 using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Configuration;
@@ -34,6 +35,7 @@ internal sealed class TopologyCommandHandler
     private readonly IRabbitMqRuntimeServiceFactory _rabbitMqRuntimeServiceFactory;
     private readonly ITopologyDocumentWriter _topologyDocumentWriter;
     private readonly ICommandOutputWriter _commandOutputWriter;
+    private readonly ITopologyTemplateCatalog _topologyTemplateCatalog;
 
     public TopologyCommandHandler(
         ITopologyParser topologyParser,
@@ -41,7 +43,8 @@ internal sealed class TopologyCommandHandler
         ITopologyValidator topologyValidator,
         IRabbitMqRuntimeServiceFactory rabbitMqRuntimeServiceFactory,
         ITopologyDocumentWriter topologyDocumentWriter,
-        ICommandOutputWriter commandOutputWriter)
+        ICommandOutputWriter commandOutputWriter,
+        ITopologyTemplateCatalog topologyTemplateCatalog)
     {
         _topologyParser = topologyParser;
         _topologyNormalizer = topologyNormalizer;
@@ -49,6 +52,43 @@ internal sealed class TopologyCommandHandler
         _rabbitMqRuntimeServiceFactory = rabbitMqRuntimeServiceFactory;
         _topologyDocumentWriter = topologyDocumentWriter;
         _commandOutputWriter = commandOutputWriter;
+        _topologyTemplateCatalog = topologyTemplateCatalog;
+    }
+
+    public async Task<int> InitAsync(
+        string templateName,
+        string outputPath,
+        bool force,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var content = _topologyTemplateCatalog.GetTemplateContent(templateName);
+
+            if (outputPath == JsonOutputPath)
+            {
+                _commandOutputWriter.WriteText(content);
+                return CommandExitCodes.Success;
+            }
+
+            if (!force && File.Exists(outputPath))
+            {
+                throw new InvalidOperationException(
+                    $"The file '{outputPath}' already exists. Use '--force' to overwrite it.");
+            }
+
+            await File.WriteAllTextAsync(outputPath, content, cancellationToken);
+            _commandOutputWriter.WriteText(
+                $"Created topology template '{templateName}' at '{outputPath}'.");
+            _commandOutputWriter.WriteText(
+                $"Available templates: {string.Join(", ", _topologyTemplateCatalog.GetTemplateNames())}");
+            return CommandExitCodes.Success;
+        }
+        catch (Exception exception)
+        {
+            WriteError(TopologyOutputFormat.Text, "init", exception);
+            return CommandExitCodes.ExecutionFailed;
+        }
     }
 
     public async Task<int> ValidateAsync(

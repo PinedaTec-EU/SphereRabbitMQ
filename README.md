@@ -77,11 +77,12 @@ If any expected topology is missing, the runtime fails explicitly with a diagnos
 
 ## Typical Flow
 
-1. Define topology in YAML.
-2. Install or restore `SphereRabbitMQ.IaC.Tool`.
-3. Apply it with `sprmq`.
-4. Start application code with `SphereRabbitMQ`.
-5. Publish and consume only against pre-existing broker resources.
+1. Install or restore `SphereRabbitMQ.IaC.Tool`.
+2. Scaffold a starting YAML with `sprmq init` or reuse `samples/templates/`.
+3. Define or adapt the topology in YAML.
+4. Apply it with `sprmq`.
+5. Start application code with `SphereRabbitMQ`.
+6. Publish and consume only against pre-existing broker resources.
 
 ## Runtime Error Model
 

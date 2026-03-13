@@ -68,6 +68,29 @@ dotnet run --project src/SphereRabbitMQ.IaC.Cli -- --help
 
 ## Commands
 
+### `init`
+
+Creates a topology YAML file from a built-in template.
+
+Available templates:
+
+- `minimal`
+- `quorum`
+- `retry`
+- `retry-dead-letter`
+- `debug`
+- `topic-routing`
+
+Examples:
+
+```bash
+sprmq init --template minimal --output-file topology.yaml
+sprmq init --template retry-dead-letter --output-file topology.yaml
+sprmq init --template debug --output-file -
+```
+
+The same templates are also checked into the repository under `samples/templates/` for direct reuse and review.
+
 ### `validate`
 
 Validates YAML syntax, normalization, and semantic consistency.
