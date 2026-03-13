@@ -2,7 +2,7 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <AssemblyName>SphereRabbitMQ.IaC.Infrastructure.RabbitMQ</AssemblyName>
-    <ReleaseVersion>0.1.2.58</ReleaseVersion>
+    <ReleaseVersion>0.1.2.59</ReleaseVersion>
     <AssemblyVersion>$(ReleaseVersion)</AssemblyVersion>
     <FileVersion>$(ReleaseVersion)</FileVersion>
     <Version>$(ReleaseVersion)</Version>
