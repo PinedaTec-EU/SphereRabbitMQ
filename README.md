@@ -28,6 +28,11 @@ Infrastructure toolchain and CLI for:
 
 CLI documentation: [docs/cli.md](/Users/jmr.pineda/Projects/GitHub/PinedaTec.eu/SphereRabbitMQ/docs/cli.md)
 
+Distribution:
+
+- runtime library: NuGet package `SphereRabbitMQ`
+- CLI: NuGet `dotnet tool` package `SphereRabbitMQ.IaC.Tool` providing the `sprmq` command
+
 ### `SphereRabbitMQ`
 
 Runtime library for:
@@ -73,9 +78,10 @@ If any expected topology is missing, the runtime fails explicitly with a diagnos
 ## Typical Flow
 
 1. Define topology in YAML.
-2. Apply it with `sprmq`.
-3. Start application code with `SphereRabbitMQ`.
-4. Publish and consume only against pre-existing broker resources.
+2. Install or restore `SphereRabbitMQ.IaC.Tool`.
+3. Apply it with `sprmq`.
+4. Start application code with `SphereRabbitMQ`.
+5. Publish and consume only against pre-existing broker resources.
 
 ## Runtime Error Model
 

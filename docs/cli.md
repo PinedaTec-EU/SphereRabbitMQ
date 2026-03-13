@@ -32,7 +32,27 @@ That means:
 
 ## Build And Run
 
-Publish the standalone CLI through the VS Code task `publish sprmq cli`.
+The recommended distribution model is a NuGet-hosted `dotnet tool` package published as `SphereRabbitMQ.IaC.Tool`.
+
+Install globally:
+
+```bash
+dotnet tool install --global SphereRabbitMQ.IaC.Tool
+sprmq --help
+```
+
+Or install it per repository with a local tool manifest:
+
+```bash
+dotnet new tool-manifest
+dotnet tool install SphereRabbitMQ.IaC.Tool
+dotnet tool restore
+dotnet tool run sprmq -- --help
+```
+
+When the consuming repository already has a `NuGet.Config`, `dotnet tool restore` resolves the package from the configured feeds, including `https://api.nuget.org/v3/index.json` when published there.
+
+For local development in this repository you can still publish the standalone CLI through the VS Code task `publish sprmq cli`.
 
 The published binary is generated in `./cli`:
 

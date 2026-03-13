@@ -2,6 +2,8 @@
 
 `SphereRabbitMQ` is the application/runtime layer that publishes and consumes against RabbitMQ topology already provisioned by `SphereRabbitMQ.IaC` or any other external provisioning tool.
 
+If you also need topology provisioning commands in a developer environment, install the separate `sprmq` CLI as the `SphereRabbitMQ.IaC.Tool` `dotnet tool`. The runtime NuGet package does not install shell commands.
+
 ## Hard Restrictions
 
 The runtime library never creates or mutates:
