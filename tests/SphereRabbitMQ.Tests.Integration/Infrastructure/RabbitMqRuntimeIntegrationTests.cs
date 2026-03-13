@@ -1,16 +1,17 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+
 using RabbitMQ.Client;
-using SphereRabbitMQ.Abstractions.Configuration;
-using SphereRabbitMQ.Abstractions.Subscribers;
+using RabbitMQ.Client.Exceptions;
+
 using SphereRabbitMQ.Abstractions.Publishing;
 using SphereRabbitMQ.Abstractions.Serialization;
+using SphereRabbitMQ.Abstractions.Subscribers;
 using SphereRabbitMQ.DependencyInjection;
+using SphereRabbitMQ.Domain.Messaging;
 using SphereRabbitMQ.Domain.Publishing;
 using SphereRabbitMQ.Domain.Subscribers;
-using SphereRabbitMQ.Domain.Messaging;
-using RabbitMQ.Client.Exceptions;
 using SphereRabbitMQ.Infrastructure.RabbitMQ.Connection;
 using SphereRabbitMQ.Infrastructure.RabbitMQ.Publishing;
 using SphereRabbitMQ.Tests.Integration.Support;
