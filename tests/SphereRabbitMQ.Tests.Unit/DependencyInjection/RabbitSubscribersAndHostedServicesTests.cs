@@ -149,6 +149,7 @@ public sealed class RabbitSubscriberRegistrationTests
     }
 }
 
+[Collection(SharedStateTestCollection.Name)]
 public sealed class RabbitSubscriberRegistrationBuilderTests
 {
     [Fact]

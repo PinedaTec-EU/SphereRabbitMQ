@@ -185,6 +185,53 @@ public sealed class TopologyNormalizationServiceTests
     }
 
     [Fact]
+    public async Task NormalizeAsync_UsesDefaultNamingPolicy_WhenNamingBlockIsOmitted()
+    {
+        ITopologyNormalizer topologyNormalizer = new TopologyNormalizationService();
+        var topologyDocument = new TopologyDocument
+        {
+            VirtualHosts =
+            [
+                new VirtualHostDocument
+                {
+                    Name = "sales",
+                    Queues =
+                    [
+                        new QueueDocument
+                        {
+                            Name = "orders",
+                            Retry = new RetryDocument
+                            {
+                                Enabled = true,
+                                Steps =
+                                [
+                                    new RetryStepDocument
+                                    {
+                                        Delay = "00:00:30",
+                                    },
+                                ],
+                            },
+                            DeadLetter = new DeadLetterDocument
+                            {
+                                Enabled = true,
+                            },
+                        },
+                    ],
+                },
+            ],
+        };
+
+        var topologyDefinition = await topologyNormalizer.NormalizeAsync(topologyDocument);
+        var virtualHost = topologyDefinition.VirtualHosts.Single();
+
+        Assert.Equal(".", topologyDefinition.NamingPolicy.Separator);
+        Assert.Contains(virtualHost.Exchanges, exchange => exchange.Name == "orders.retry");
+        Assert.Contains(virtualHost.Queues, queue => queue.Name == "orders.retry.step1");
+        Assert.Contains(virtualHost.Exchanges, exchange => exchange.Name == "orders.dlx");
+        Assert.Contains(virtualHost.Queues, queue => queue.Name == "orders.dlq");
+    }
+
+    [Fact]
     public async Task NormalizeAsync_AppliesDeadLetterQueueTtl_WhenConfigured()
     {
         ITopologyNormalizer topologyNormalizer = new TopologyNormalizationService();

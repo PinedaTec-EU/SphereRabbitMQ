@@ -10,13 +10,6 @@ metadata:
   service: ordering
   scenario: advanced-routing
 
-naming:
-  separator: "."
-  retryExchangeSuffix: "retry"
-  retryQueueSuffix: "retry"
-  deadLetterExchangeSuffix: "dlx"
-  deadLetterQueueSuffix: "dlq"
-
 virtualHosts:
   - name: sales-routing
     exchanges:

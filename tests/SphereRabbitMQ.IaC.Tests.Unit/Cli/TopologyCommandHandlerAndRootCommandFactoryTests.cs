@@ -25,6 +25,7 @@ using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Runtime.Interfaces;
 
 namespace SphereRabbitMQ.IaC.Tests.Unit.Cli;
 
+[Collection(EnvironmentVariableTestCollection.Name)]
 public sealed class TopologyCommandHandlerAdditionalTests
 {
     [Fact]
@@ -396,6 +397,7 @@ public sealed class TopologyCommandHandlerAdditionalTests
             workflowService);
 }
 
+[Collection(EnvironmentVariableTestCollection.Name)]
 public sealed class TopologyRootCommandFactoryTests
 {
     [Fact]

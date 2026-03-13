@@ -25,9 +25,13 @@ public sealed class RabbitMqRuntimeIntegrationTests
     public RabbitMqRuntimeIntegrationTests(RabbitMqDockerFixture fixture)
     {
         _fixture = fixture;
+        if (RabbitMqDockerAvailability.IsDockerAvailable() && !_fixture.IsAvailable)
+        {
+            throw new InvalidOperationException(_fixture.UnavailableReason ?? "RabbitMQ integration fixture is not available.");
+        }
     }
 
-    [Fact]
+    [DockerRequiredFact]
     public async Task PublishAndConsumeAsync_WorksAgainstRealBroker()
     {
         if (!_fixture.IsAvailable)
@@ -65,7 +69,7 @@ public sealed class RabbitMqRuntimeIntegrationTests
         Assert.Equal("order-1", envelope.Body.OrderId);
     }
 
-    [Fact]
+    [DockerRequiredFact]
     public async Task PublishAsync_ReusesSinglePublishingChannel_AcrossSequentialPublishes()
     {
         if (!_fixture.IsAvailable)
@@ -92,7 +96,7 @@ public sealed class RabbitMqRuntimeIntegrationTests
         Assert.Equal(2u, await CountMessagesAsync("orders.created"));
     }
 
-    [Fact]
+    [DockerRequiredFact]
     public async Task PublisherAndSubscriber_ShareSameConnectionProviderConnection()
     {
         if (!_fixture.IsAvailable)
@@ -135,7 +139,7 @@ public sealed class RabbitMqRuntimeIntegrationTests
         Assert.Same(initialConnection, currentConnection);
     }
 
-    [Fact]
+    [DockerRequiredFact]
     public async Task PublishAsync_HandlesConcurrentPublishRequests_WithoutLosingMessages()
     {
         if (!_fixture.IsAvailable)
@@ -157,7 +161,7 @@ public sealed class RabbitMqRuntimeIntegrationTests
         Assert.Equal(20u, await CountMessagesAsync("orders.created"));
     }
 
-    [Fact]
+    [DockerRequiredFact]
     public async Task RetryRoutingAsync_RequeuesThroughBrokerRetryTopology()
     {
         if (!_fixture.IsAvailable)
@@ -208,7 +212,7 @@ public sealed class RabbitMqRuntimeIntegrationTests
         Assert.Equal(1, Convert.ToInt32(envelope.Headers["x-retry-count"]));
     }
 
-    [Fact]
+    [DockerRequiredFact]
     public async Task DeadLetterAsync_ForwardsFailedMessagesToConfiguredDeadLetterRoute()
     {
         if (!_fixture.IsAvailable)
@@ -245,7 +249,7 @@ public sealed class RabbitMqRuntimeIntegrationTests
         Assert.NotEmpty(dlqMessage.ToArray());
     }
 
-    [Fact]
+    [DockerRequiredFact]
     public async Task SubscriberConcurrency_IsBoundedByMaxConcurrency()
     {
         if (!_fixture.IsAvailable)
@@ -304,7 +308,7 @@ public sealed class RabbitMqRuntimeIntegrationTests
         Assert.Equal(2, maxObserved);
     }
 
-    [Fact]
+    [DockerRequiredFact]
     public async Task SubscriberPrefetch_IsBoundedByPrefetchCount_EvenWhenMaxConcurrencyIsHigher()
     {
         if (!_fixture.IsAvailable)
@@ -369,7 +373,7 @@ public sealed class RabbitMqRuntimeIntegrationTests
         await IgnoreCancellationAsync(subscription);
     }
 
-    [Fact]
+    [DockerRequiredFact]
     public async Task PublishAsync_FailsExplicitly_WhenExchangeDoesNotExist()
     {
         if (!_fixture.IsAvailable)
@@ -387,7 +391,7 @@ public sealed class RabbitMqRuntimeIntegrationTests
         Assert.Contains("does not exist", exception.Message, StringComparison.Ordinal);
     }
 
-    [Fact]
+    [DockerRequiredFact]
     public async Task PublishAsync_WithInvalidRoutingKey_DoesNotReachAnyBoundQueue()
     {
         if (!_fixture.IsAvailable)
@@ -410,7 +414,7 @@ public sealed class RabbitMqRuntimeIntegrationTests
         Assert.Equal(0u, await CountMessagesAsync("orders.created.multi"));
     }
 
-    [Fact]
+    [DockerRequiredFact]
     public async Task SubscribeAsync_FailsExplicitly_WhenQueueDoesNotExist()
     {
         if (!_fixture.IsAvailable)
@@ -432,7 +436,7 @@ public sealed class RabbitMqRuntimeIntegrationTests
         Assert.Contains("does not exist", exception.Message, StringComparison.Ordinal);
     }
 
-    [Fact]
+    [DockerRequiredFact]
     public async Task SubscribeAsync_FailsExplicitly_WhenRetryExchangeDoesNotExist()
     {
         if (!_fixture.IsAvailable)
@@ -459,7 +463,7 @@ public sealed class RabbitMqRuntimeIntegrationTests
         Assert.Contains("orders.created.retry.missing", exception.Message, StringComparison.Ordinal);
     }
 
-    [Fact]
+    [DockerRequiredFact]
     public async Task SubscribeAsync_FailsExplicitly_WhenRetryQueueDoesNotExist()
     {
         if (!_fixture.IsAvailable)
@@ -486,7 +490,7 @@ public sealed class RabbitMqRuntimeIntegrationTests
         Assert.Contains("orders.created.retry.step1.missing", exception.Message, StringComparison.Ordinal);
     }
 
-    [Fact]
+    [DockerRequiredFact]
     public async Task SubscribeAsync_FailsExplicitly_WhenDeadLetterExchangeDoesNotExist()
     {
         if (!_fixture.IsAvailable)
@@ -513,7 +517,7 @@ public sealed class RabbitMqRuntimeIntegrationTests
         Assert.Contains("orders.created.dlx.missing", exception.Message, StringComparison.Ordinal);
     }
 
-    [Fact]
+    [DockerRequiredFact]
     public async Task SubscribeAsync_FailsExplicitly_WhenDeadLetterQueueDoesNotExist()
     {
         if (!_fixture.IsAvailable)
@@ -540,7 +544,7 @@ public sealed class RabbitMqRuntimeIntegrationTests
         Assert.Contains("orders.created.dlq.missing", exception.Message, StringComparison.Ordinal);
     }
 
-    [Fact]
+    [DockerRequiredFact]
     public async Task NonRetriableMessageException_SendsDirectlyToDeadLetter()
     {
         if (!_fixture.IsAvailable)
@@ -583,7 +587,7 @@ public sealed class RabbitMqRuntimeIntegrationTests
         Assert.Equal(0u, await CountMessagesAsync("orders.created.retry.step1"));
     }
 
-    [Fact]
+    [DockerRequiredFact]
     public async Task DiscardMessageException_DiscardsWithoutRetryOrDeadLetter()
     {
         if (!_fixture.IsAvailable)
@@ -630,7 +634,7 @@ public sealed class RabbitMqRuntimeIntegrationTests
         Assert.Equal(0u, await CountMessagesAsync("orders.created.dlq"));
     }
 
-    [Fact]
+    [DockerRequiredFact]
     public async Task RetryThenDeadLetterAsync_RetriesExpectedTimes_ThenRoutesToDeadLetter_AndNotifies()
     {
         if (!_fixture.IsAvailable)
@@ -688,7 +692,7 @@ public sealed class RabbitMqRuntimeIntegrationTests
         Assert.Equal(0u, await CountMessagesAsync("orders.created.retry.step1"));
     }
 
-    [Fact]
+    [DockerRequiredFact]
     public async Task DeadLetterOnlyAsync_Notifies_WhenMessageIsRoutedToDeadLetterWithoutRetry()
     {
         if (!_fixture.IsAvailable)
@@ -745,7 +749,7 @@ public sealed class RabbitMqRuntimeIntegrationTests
         Assert.Equal(0u, await CountMessagesAsync("orders.created.retry.step1"));
     }
 
-    [Fact]
+    [DockerRequiredFact]
     public async Task RetryForwardFailure_DoesNotAcknowledgeOriginalMessage()
     {
         if (!_fixture.IsAvailable)
@@ -801,7 +805,7 @@ public sealed class RabbitMqRuntimeIntegrationTests
         Assert.Equal(0u, await CountMessagesAsync("orders.created.retry.step1"));
     }
 
-    [Fact]
+    [DockerRequiredFact]
     public async Task DeadLetterForwardFailure_DoesNotAcknowledgeOriginalMessage()
     {
         if (!_fixture.IsAvailable)
@@ -856,7 +860,7 @@ public sealed class RabbitMqRuntimeIntegrationTests
         Assert.Equal(0u, await CountMessagesAsync("orders.created.dlq"));
     }
 
-    [Fact]
+    [DockerRequiredFact]
     public async Task DiscardStrategy_DoesNotNotify_WhenRetryAndDeadLetterAreDisabled()
     {
         if (!_fixture.IsAvailable)
@@ -911,7 +915,7 @@ public sealed class RabbitMqRuntimeIntegrationTests
         Assert.Equal(0u, await CountMessagesAsync("orders.created.dlq"));
     }
 
-    [Fact]
+    [DockerRequiredFact]
     public async Task DeserializeFailure_DeadLettersMalformedPayload_WhenComponentFailureHandlerChoosesDeadLetter()
     {
         if (!_fixture.IsAvailable)
@@ -957,7 +961,7 @@ public sealed class RabbitMqRuntimeIntegrationTests
         Assert.Equal(0u, await CountMessagesAsync("orders.created.retry.step1"));
     }
 
-    [Fact]
+    [DockerRequiredFact]
     public async Task DeserializeFailure_DiscardsMalformedPayload_WhenComponentFailureHandlerChoosesDiscard()
     {
         if (!_fixture.IsAvailable)
@@ -1003,7 +1007,7 @@ public sealed class RabbitMqRuntimeIntegrationTests
         Assert.Equal(0u, await CountMessagesAsync("orders.created.dlq"));
     }
 
-    [Fact]
+    [DockerRequiredFact]
     public async Task PublishAsync_NotifiesPublisherFailureHandler_WhenSerializerThrows()
     {
         if (!_fixture.IsAvailable)

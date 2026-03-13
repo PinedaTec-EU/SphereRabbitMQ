@@ -23,8 +23,14 @@ using SphereRabbitMQ.IaC.Infrastructure.Yaml.Parsing;
 
 namespace SphereRabbitMQ.IaC.Tests.Unit.Cli;
 
+[Collection(EnvironmentVariableTestCollection.Name)]
 public sealed class TopologyCliTests
 {
+    private const string ManagementUrlEnvironmentVariable = "SPHERE_RABBITMQ_MANAGEMENT_URL";
+    private const string UsernameEnvironmentVariable = "SPHERE_RABBITMQ_USERNAME";
+    private const string PasswordEnvironmentVariable = "SPHERE_RABBITMQ_PASSWORD";
+    private const string VirtualHostsEnvironmentVariable = "SPHERE_RABBITMQ_VHOSTS";
+
     [Fact]
     public async Task MainAsync_DestroyHelp_PrintsExamples()
     {
@@ -86,6 +92,7 @@ public sealed class TopologyCliTests
     public async Task DestroyAsync_DryRun_SucceedsWithoutAllowDestructive()
     {
         var filePath = Path.GetTempFileName();
+        using var _ = ClearBrokerEnvironment();
 
         try
         {
@@ -164,6 +171,7 @@ public sealed class TopologyCliTests
     public async Task ApplyAsync_ReturnsUnsupportedPlan_AndPrintsBlockingOperations()
     {
         var filePath = Path.GetTempFileName();
+        using var _ = ClearBrokerEnvironment();
 
         try
         {
@@ -316,6 +324,7 @@ public sealed class TopologyCliTests
     public async Task ApplyAsync_WithMigrate_ExecutesWorkflowDespiteBlockingPlan()
     {
         var filePath = Path.GetTempFileName();
+        using var _ = ClearBrokerEnvironment();
 
         try
         {
@@ -418,6 +427,7 @@ public sealed class TopologyCliTests
     public async Task ApplyAsync_ReturnsValidationFailed_WhenYamlBrokerVirtualHostDiffersFromDeclaredVirtualHost()
     {
         var filePath = Path.GetTempFileName();
+        using var _ = ClearBrokerEnvironment();
 
         try
         {
@@ -469,6 +479,49 @@ public sealed class TopologyCliTests
         finally
         {
             File.Delete(filePath);
+        }
+    }
+
+    private static IDisposable ClearBrokerEnvironment()
+    {
+        var previousManagementUrl = Environment.GetEnvironmentVariable(ManagementUrlEnvironmentVariable);
+        var previousUsername = Environment.GetEnvironmentVariable(UsernameEnvironmentVariable);
+        var previousPassword = Environment.GetEnvironmentVariable(PasswordEnvironmentVariable);
+        var previousVirtualHosts = Environment.GetEnvironmentVariable(VirtualHostsEnvironmentVariable);
+
+        Environment.SetEnvironmentVariable(ManagementUrlEnvironmentVariable, null);
+        Environment.SetEnvironmentVariable(UsernameEnvironmentVariable, null);
+        Environment.SetEnvironmentVariable(PasswordEnvironmentVariable, null);
+        Environment.SetEnvironmentVariable(VirtualHostsEnvironmentVariable, null);
+
+        return new EnvironmentVariableScope(previousManagementUrl, previousUsername, previousPassword, previousVirtualHosts);
+    }
+
+    private sealed class EnvironmentVariableScope : IDisposable
+    {
+        private readonly string? _previousManagementUrl;
+        private readonly string? _previousUsername;
+        private readonly string? _previousPassword;
+        private readonly string? _previousVirtualHosts;
+
+        public EnvironmentVariableScope(
+            string? previousManagementUrl,
+            string? previousUsername,
+            string? previousPassword,
+            string? previousVirtualHosts)
+        {
+            _previousManagementUrl = previousManagementUrl;
+            _previousUsername = previousUsername;
+            _previousPassword = previousPassword;
+            _previousVirtualHosts = previousVirtualHosts;
+        }
+
+        public void Dispose()
+        {
+            Environment.SetEnvironmentVariable(ManagementUrlEnvironmentVariable, _previousManagementUrl);
+            Environment.SetEnvironmentVariable(UsernameEnvironmentVariable, _previousUsername);
+            Environment.SetEnvironmentVariable(PasswordEnvironmentVariable, _previousPassword);
+            Environment.SetEnvironmentVariable(VirtualHostsEnvironmentVariable, _previousVirtualHosts);
         }
     }
 }

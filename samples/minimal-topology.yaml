@@ -9,13 +9,6 @@ metadata:
   owner: platform
   service: ordering
 
-naming:
-  separator: "."
-  retryExchangeSuffix: "retry"
-  retryQueueSuffix: "retry"
-  deadLetterExchangeSuffix: "dlx"
-  deadLetterQueueSuffix: "dlq"
-
 virtualHosts:
   - name: sales
     exchanges:

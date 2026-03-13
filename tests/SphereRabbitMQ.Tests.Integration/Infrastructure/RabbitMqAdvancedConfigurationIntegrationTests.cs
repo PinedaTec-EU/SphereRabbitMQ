@@ -28,9 +28,13 @@ public sealed class RabbitMqAdvancedConfigurationIntegrationTests
     public RabbitMqAdvancedConfigurationIntegrationTests(RabbitMqDockerFixture fixture)
     {
         _fixture = fixture;
+        if (RabbitMqDockerAvailability.IsDockerAvailable() && !_fixture.IsAvailable)
+        {
+            throw new InvalidOperationException(_fixture.UnavailableReason ?? "RabbitMQ integration fixture is not available.");
+        }
     }
 
-    [Fact]
+    [DockerRequiredFact]
     public async Task MinimalTypedConfiguration_WorksWithDefaults()
     {
         if (!_fixture.IsAvailable)
@@ -69,7 +73,7 @@ public sealed class RabbitMqAdvancedConfigurationIntegrationTests
         }
     }
 
-    [Fact]
+    [DockerRequiredFact]
     public async Task RoutingKeyOverride_AndKeyedSubscribers_RouteMessagesToMatchingQueues()
     {
         if (!_fixture.IsAvailable)
@@ -113,7 +117,7 @@ public sealed class RabbitMqAdvancedConfigurationIntegrationTests
         }
     }
 
-    [Fact]
+    [DockerRequiredFact]
     public async Task QueueBoundToMultipleRoutingKeys_DeliversAllMessagesToSameConsumer()
     {
         if (!_fixture.IsAvailable)

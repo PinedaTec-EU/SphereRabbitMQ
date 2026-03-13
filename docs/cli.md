@@ -278,7 +278,11 @@ queues:
 
 ### Naming convention policy
 
-The `naming` block controls generated retry and dead-letter artifact names:
+The `naming` block is optional and only needed when you want to override the built-in naming convention for generated retry and dead-letter artifacts.
+
+Minimal/starter YAMLs can omit it entirely.
+
+When omitted, these defaults are used:
 
 ```yaml
 naming:
@@ -288,8 +292,6 @@ naming:
   deadLetterExchangeSuffix: "dlx"
   deadLetterQueueSuffix: "dlq"
 ```
-
-When naming values are omitted, internal defaults are used.
 
 ### Debug queue generation
 

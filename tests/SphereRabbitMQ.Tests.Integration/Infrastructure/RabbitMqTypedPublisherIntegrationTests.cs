@@ -18,9 +18,13 @@ public sealed class RabbitMqTypedPublisherIntegrationTests
     public RabbitMqTypedPublisherIntegrationTests(RabbitMqDockerFixture fixture)
     {
         _fixture = fixture;
+        if (RabbitMqDockerAvailability.IsDockerAvailable() && !_fixture.IsAvailable)
+        {
+            throw new InvalidOperationException(_fixture.UnavailableReason ?? "RabbitMQ integration fixture is not available.");
+        }
     }
 
-    [Fact]
+    [DockerRequiredFact]
     public async Task PublishAsync_UsesPreconfiguredRoute()
     {
         if (!_fixture.IsAvailable)

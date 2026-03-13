@@ -17,10 +17,13 @@ public sealed class RabbitMqDockerFixture : IAsyncLifetime
 
     public bool IsAvailable { get; private set; }
 
+    public string? UnavailableReason { get; private set; }
+
     public async Task InitializeAsync()
     {
-        if (!await CanUseDockerAsync())
+        if (!RabbitMqDockerAvailability.IsDockerAvailable())
         {
+            UnavailableReason = RabbitMqDockerAvailability.DockerRequiredMessage;
             return;
         }
 
@@ -33,7 +36,10 @@ public sealed class RabbitMqDockerFixture : IAsyncLifetime
         if (IsAvailable)
         {
             await ProvisionTopologyAsync();
+            return;
         }
+
+        UnavailableReason = "RabbitMQ Docker container did not become ready in time.";
     }
 
     public async Task DisposeAsync()
@@ -116,31 +122,6 @@ public sealed class RabbitMqDockerFixture : IAsyncLifetime
         }
 
         return false;
-    }
-
-    private static async Task<bool> CanUseDockerAsync()
-    {
-        try
-        {
-            var process = Process.Start(new ProcessStartInfo("docker", "version")
-            {
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-            });
-
-            if (process is null)
-            {
-                return false;
-            }
-
-            await process.WaitForExitAsync();
-            return process.ExitCode == 0;
-        }
-        catch
-        {
-            return false;
-        }
     }
 
     private static async Task RunDockerAsync(string arguments, bool ignoreExitCode = false)
