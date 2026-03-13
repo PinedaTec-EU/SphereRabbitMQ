@@ -3,10 +3,6 @@
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
     <AssemblyName>SphereRabbitMQ.IaC.Tests.Integration</AssemblyName>
-    <ReleaseVersion>0.1.2.59</ReleaseVersion>
-    <AssemblyVersion>$(ReleaseVersion)</AssemblyVersion>
-    <FileVersion>$(ReleaseVersion)</FileVersion>
-    <Version>$(ReleaseVersion)</Version>
     <RootNamespace>SphereRabbitMQ.IaC.Tests.Integration</RootNamespace>
   </PropertyGroup>
 
