@@ -15,7 +15,6 @@ naming:
   retryQueueSuffix: "retry"
   deadLetterExchangeSuffix: "dlx"
   deadLetterQueueSuffix: "dlq"
-  parkingLotQueueSuffix: "parking"
 
 virtualHosts:
   - name: sales

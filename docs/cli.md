@@ -88,7 +88,7 @@ Operational rules:
 - an ephemeral per-virtual-host AMQP lock queue named `sprmq.migration.lock` is used to serialize migrations across concurrent CLI instances
 - incompatible exchanges are deleted and recreated, then bindings are restored from the YAML definition
 - generated debug queues are deleted and recreated without preserving messages
-- generated retry/dead-letter/parking queues are deleted and recreated without preserving messages
+- generated retry/dead-letter queues are deleted and recreated without preserving messages
 - mainstream queues use a temporary queue:
   - create a temporary queue and bind it with the same desired bindings
   - remove bindings from the old queue
@@ -222,7 +222,6 @@ naming:
   retryQueueSuffix: "retry"
   deadLetterExchangeSuffix: "dlx"
   deadLetterQueueSuffix: "dlq"
-  parkingLotQueueSuffix: "parking"
 ```
 
 When naming values are omitted, internal defaults are used.
