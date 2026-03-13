@@ -24,7 +24,7 @@ public sealed class RabbitMqTypedPublisherIntegrationTests
         }
     }
 
-    [DockerRequiredFact]
+    [Fact]
     public async Task PublishAsync_UsesPreconfiguredRoute()
     {
         if (!_fixture.IsAvailable)

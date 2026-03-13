@@ -34,7 +34,7 @@ public sealed class RabbitMqAdvancedConfigurationIntegrationTests
         }
     }
 
-    [DockerRequiredFact]
+    [Fact]
     public async Task MinimalTypedConfiguration_WorksWithDefaults()
     {
         if (!_fixture.IsAvailable)
@@ -73,7 +73,7 @@ public sealed class RabbitMqAdvancedConfigurationIntegrationTests
         }
     }
 
-    [DockerRequiredFact]
+    [Fact]
     public async Task RoutingKeyOverride_AndKeyedSubscribers_RouteMessagesToMatchingQueues()
     {
         if (!_fixture.IsAvailable)
@@ -117,7 +117,7 @@ public sealed class RabbitMqAdvancedConfigurationIntegrationTests
         }
     }
 
-    [DockerRequiredFact]
+    [Fact]
     public async Task QueueBoundToMultipleRoutingKeys_DeliversAllMessagesToSameConsumer()
     {
         if (!_fixture.IsAvailable)

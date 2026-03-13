@@ -23,7 +23,7 @@ public sealed class RabbitMqQueueMessageMoverIntegrationTests
         }
     }
 
-    [DockerRequiredFact]
+    [Fact]
     public async Task MoveAsync_MovesMessagesBetweenExistingQueues()
     {
         if (!_fixture.IsAvailable)

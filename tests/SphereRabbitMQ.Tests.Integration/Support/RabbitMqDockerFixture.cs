@@ -12,6 +12,10 @@ public sealed class RabbitMqDockerFixture : IAsyncLifetime
     private const string DefaultVirtualHost = "/";
 
     private readonly string _containerName = $"sphere-rabbitmq-tests-{Guid.NewGuid():N}";
+    private string _hostName = DefaultHostName;
+    private string _password = DefaultPassword;
+    private string _userName = DefaultUserName;
+    private string _virtualHost = DefaultVirtualHost;
 
     public int AmqpPort { get; private set; }
 
@@ -21,10 +25,30 @@ public sealed class RabbitMqDockerFixture : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
+        if (RabbitMqRuntimeIntegrationSettings.TryCreate(out var settings) && settings is not null)
+        {
+            _hostName = settings.HostName;
+            _userName = settings.UserName;
+            _password = settings.Password;
+            _virtualHost = settings.VirtualHost;
+            AmqpPort = settings.Port;
+            IsAvailable = await WaitForBrokerAsync();
+
+            if (!IsAvailable)
+            {
+                throw new InvalidOperationException(
+                    $"RabbitMQ integration broker at '{_hostName}:{AmqpPort}' is not reachable. " +
+                    "Set SPHERE_RABBITMQ_AMQP_HOST/SPHERE_RABBITMQ_AMQP_PORT explicitly or remove SPHERE_RABBITMQ_* settings to fall back to Docker.");
+            }
+
+            await ProvisionTopologyAsync();
+            return;
+        }
+
         if (!RabbitMqDockerAvailability.IsDockerAvailable())
         {
-            UnavailableReason = RabbitMqDockerAvailability.DockerRequiredMessage;
-            return;
+            throw new InvalidOperationException(
+                "Runtime integration tests require either a reachable RabbitMQ configured through SPHERE_RABBITMQ_AMQP_* / SPHERE_RABBITMQ_* or a local Docker daemon.");
         }
 
         AmqpPort = GetFreePort();
@@ -39,7 +63,7 @@ public sealed class RabbitMqDockerFixture : IAsyncLifetime
             return;
         }
 
-        UnavailableReason = "RabbitMQ Docker container did not become ready in time.";
+        throw new InvalidOperationException("RabbitMQ Docker container did not become ready in time.");
     }
 
     public async Task DisposeAsync()
@@ -92,18 +116,18 @@ public sealed class RabbitMqDockerFixture : IAsyncLifetime
     public ConnectionFactory CreateConnectionFactory()
         => new()
         {
-            HostName = DefaultHostName,
+            HostName = _hostName,
             Port = AmqpPort,
-            UserName = DefaultUserName,
-            Password = DefaultPassword,
-            VirtualHost = DefaultVirtualHost,
+            UserName = _userName,
+            Password = _password,
+            VirtualHost = _virtualHost,
             AutomaticRecoveryEnabled = true,
             TopologyRecoveryEnabled = false,
             ConsumerDispatchConcurrency = 1,
         };
 
     public string CreateConnectionString()
-        => $"amqp://{DefaultUserName}:{DefaultPassword}@{DefaultHostName}:{AmqpPort}/{Uri.EscapeDataString(DefaultVirtualHost)}";
+        => $"amqp://{_userName}:{_password}@{_hostName}:{AmqpPort}/{Uri.EscapeDataString(_virtualHost)}";
 
     private async Task<bool> WaitForBrokerAsync()
     {
