@@ -267,6 +267,7 @@ public sealed class TopologyCommandHandlerAdditionalTests
             null,
             new BrokerOptionsInput("http://localhost:15672/api/", "guest", "guest", ["sales"]),
             "-",
+            false,
             TopologyOutputFormat.Text,
             false,
             CancellationToken.None);
@@ -275,6 +276,56 @@ public sealed class TopologyCommandHandlerAdditionalTests
         outputWriterMock.Verify(writer => writer.WriteText(It.Is<string>(text => text.Contains("Export completed.", StringComparison.Ordinal))), Times.Once);
         outputWriterMock.Verify(writer => writer.WriteText("virtualHosts:\n  - name: sales\n"), Times.Once);
         outputWriterMock.Verify(writer => writer.WriteJson(It.IsAny<object>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ExportAsync_WithIncludeBroker_WritesResolvedBrokerIntoExportedDocument()
+    {
+        var runtimeFactoryMock = new Mock<IRabbitMqRuntimeServiceFactory>(MockBehavior.Strict);
+        var topologyDocumentWriterMock = new Mock<ITopologyDocumentWriter>(MockBehavior.Strict);
+        var outputWriterMock = new Mock<ICommandOutputWriter>(MockBehavior.Strict);
+        var workflowMock = new Mock<ITopologyWorkflowService>(MockBehavior.Strict);
+
+        var exportedDocument = new TopologyDocument
+        {
+            VirtualHosts = [new VirtualHostDocument { Name = "sales" }],
+        };
+
+        workflowMock.Setup(service => service.ExportAsync(It.IsAny<CancellationToken>())).ReturnsAsync(exportedDocument);
+        runtimeFactoryMock
+            .Setup(factory => factory.Create(It.IsAny<RabbitMqManagementOptions>()))
+            .Returns(CreateRuntimeServices(workflowMock.Object));
+        topologyDocumentWriterMock
+            .Setup(writer => writer.WriteAsync(
+                It.Is<TopologyDocument>(document =>
+                    document.Broker != null &&
+                    document.Broker.ManagementUrl == "http://localhost:15672/api/" &&
+                    document.Broker.Username == "guest" &&
+                    document.Broker.Password == "guest" &&
+                    document.Broker.VirtualHosts.SequenceEqual(new[] { "sales" })),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync("broker:\n  managementUrl: http://localhost:15672/api/\n");
+        outputWriterMock.Setup(writer => writer.WriteText(It.IsAny<string>()));
+
+        var handler = CreateHandler(
+            Mock.Of<ITopologyParser>(),
+            Mock.Of<ITopologyNormalizer>(),
+            Mock.Of<ITopologyValidator>(),
+            runtimeFactoryMock.Object,
+            topologyDocumentWriterMock.Object,
+            outputWriterMock.Object);
+
+        var exitCode = await handler.ExportAsync(
+            null,
+            new BrokerOptionsInput("http://localhost:15672/api/", "guest", "guest", ["sales"]),
+            "-",
+            true,
+            TopologyOutputFormat.Text,
+            false,
+            CancellationToken.None);
+
+        Assert.Equal(CommandExitCodes.Success, exitCode);
+        topologyDocumentWriterMock.VerifyAll();
     }
 
     private static TopologyCommandHandler CreateHandler(
@@ -335,6 +386,7 @@ public sealed class TopologyRootCommandFactoryTests
         Assert.Contains(GetCommand(rootCommand, "apply").Options, option => option.Name == "migrate");
         Assert.Contains(GetCommand(rootCommand, "destroy").Options, option => option.Name == "allow-destructive");
         Assert.Contains(GetCommand(rootCommand, "export").Options, option => option.Name == "output-file");
+        Assert.Contains(GetCommand(rootCommand, "export").Options, option => option.Name == "include-broker");
     }
 
     [Fact]
@@ -388,6 +440,60 @@ public sealed class TopologyRootCommandFactoryTests
         runtimeFactoryMock.VerifyAll();
         outputWriterMock.Verify(writer => writer.WriteJson(It.IsAny<ExportCommandResult>()), Times.Once);
         outputWriterMock.Verify(writer => writer.WriteText(It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Create_InvokedExportCommand_WithIncludeBroker_PassesFlagToHandlerFlow()
+    {
+        var runtimeFactoryMock = new Mock<IRabbitMqRuntimeServiceFactory>(MockBehavior.Strict);
+        var topologyDocumentWriterMock = new Mock<ITopologyDocumentWriter>(MockBehavior.Strict);
+        var outputWriterMock = new Mock<ICommandOutputWriter>(MockBehavior.Strict);
+        var workflowMock = new Mock<ITopologyWorkflowService>(MockBehavior.Strict);
+
+        var exportedDocument = new TopologyDocument
+        {
+            VirtualHosts = [new VirtualHostDocument { Name = "sales" }],
+        };
+
+        workflowMock.Setup(service => service.ExportAsync(It.IsAny<CancellationToken>())).ReturnsAsync(exportedDocument);
+        runtimeFactoryMock
+            .Setup(factory => factory.Create(It.Is<RabbitMqManagementOptions>(options =>
+                options.BaseUri == new Uri("http://rabbit:15672/api/") &&
+                options.Username == "cli-user" &&
+                options.Password == "cli-pass" &&
+                options.ManagedVirtualHosts.SequenceEqual(new[] { "sales" }))))
+            .Returns(CreateRuntimeServices(workflowMock.Object));
+        topologyDocumentWriterMock
+            .Setup(writer => writer.WriteAsync(
+                It.Is<TopologyDocument>(document =>
+                    document.Broker != null &&
+                    document.Broker.ManagementUrl == "http://rabbit:15672/api/" &&
+                    document.Broker.Username == "cli-user"),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync("broker:\n  managementUrl: http://rabbit:15672/api/\n");
+        outputWriterMock.Setup(writer => writer.WriteText(It.IsAny<string>()));
+
+        using var services = new ServiceCollection()
+            .AddSingleton<ITopologyTemplateCatalog>(CreateTemplateCatalog())
+            .AddSingleton(CreateHandler(
+                runtimeFactory: runtimeFactoryMock.Object,
+                documentWriter: topologyDocumentWriterMock.Object,
+                outputWriter: outputWriterMock.Object))
+            .BuildServiceProvider();
+
+        var rootCommand = TopologyRootCommandFactory.Create(services);
+        var exitCode = await rootCommand.InvokeAsync([
+            "export",
+            "--management-url", "http://rabbit:15672/api/",
+            "--username", "cli-user",
+            "--password", "cli-pass",
+            "--vhost", "sales",
+            "--include-broker",
+            "--output-file", "-",
+        ]);
+
+        Assert.Equal(CommandExitCodes.Success, exitCode);
+        topologyDocumentWriterMock.VerifyAll();
     }
 
     [Fact]

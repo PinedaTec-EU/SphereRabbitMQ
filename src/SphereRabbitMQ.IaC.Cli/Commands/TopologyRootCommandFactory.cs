@@ -73,6 +73,7 @@ internal static class TopologyRootCommandFactory
 
         Example:
           sprmq export --file samples/minimal-topology.yaml --output-file topology.yaml
+          sprmq export --include-broker --output-file topology.yaml
         """;
 
     internal static RootCommand Create(IServiceProvider serviceProvider)
@@ -96,6 +97,7 @@ internal static class TopologyRootCommandFactory
         var destroyVirtualHostOption = new Option<bool>("--destroy-vhost", () => false, "Delete the full virtual host instead of only the declared resources.");
         var exportOutputPathOption = new Option<string>("--output-file", () => "-", "Output file path for export. Use '-' to write YAML to stdout.");
         var exportFileOption = new Option<string?>("--file", "Optional topology YAML file used as a source for broker connection settings.");
+        var includeBrokerOption = new Option<bool>("--include-broker", () => false, "Include the resolved broker settings in the exported YAML.");
 
         var rootCommand = new RootCommand("SphereRabbitMQ.IaC")
         {
@@ -233,6 +235,7 @@ internal static class TopologyRootCommandFactory
         exportCommand.AddOption(passwordOption);
         exportCommand.AddOption(virtualHostsOption);
         exportCommand.AddOption(exportOutputPathOption);
+        exportCommand.AddOption(includeBrokerOption);
         exportCommand.AddOption(verboseOption);
         Handler.SetHandler(exportCommand, async (InvocationContext context) =>
         {
@@ -242,6 +245,7 @@ internal static class TopologyRootCommandFactory
                 parseResult.GetValueForOption(exportFileOption),
                 CreateBrokerOptions(parseResult, managementUrlOption, usernameOption, passwordOption, virtualHostsOption),
                 parseResult.GetValueForOption(exportOutputPathOption)!,
+                parseResult.GetValueForOption(includeBrokerOption),
                 parseResult.GetValueForOption(outputFormatOption),
                 parseResult.GetValueForOption(verboseOption),
                 cancellationToken);

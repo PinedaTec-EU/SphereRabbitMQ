@@ -179,7 +179,10 @@ Reads current broker topology and exports it as YAML.
 ```bash
 ./cli/sprmq export --file samples/minimal-topology.yaml
 ./cli/sprmq export --output-file exported-topology.yaml
+./cli/sprmq export --include-broker --output-file topology.bootstrap.yaml
 ```
+
+`--include-broker` makes the export bootstrap-friendly for developers by persisting the resolved broker section into the YAML output.
 
 ## Broker Configuration Resolution
 

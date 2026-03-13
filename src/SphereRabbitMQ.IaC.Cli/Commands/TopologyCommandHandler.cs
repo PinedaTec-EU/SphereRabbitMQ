@@ -265,6 +265,7 @@ internal sealed class TopologyCommandHandler
         string? filePath,
         BrokerOptionsInput brokerOptionsInput,
         string outputPath,
+        bool includeBroker,
         TopologyOutputFormat outputFormat,
         bool verbose,
         CancellationToken cancellationToken)
@@ -282,7 +283,8 @@ internal sealed class TopologyCommandHandler
             WriteConnection(outputFormat, broker);
             WriteVerbose(outputFormat, verbose, "Phase: export broker topology.");
             using var runtimeServices = CreateRuntimeServices(broker.Options);
-            var document = await runtimeServices.TopologyWorkflowService.ExportAsync(cancellationToken);
+            var exportedDocument = await runtimeServices.TopologyWorkflowService.ExportAsync(cancellationToken);
+            var document = includeBroker ? AttachBroker(exportedDocument, broker.Options) : exportedDocument;
             var content = await _topologyDocumentWriter.WriteAsync(document, cancellationToken);
             var result = new ExportCommandResult(broker, content, document);
 
@@ -428,6 +430,20 @@ internal sealed class TopologyCommandHandler
             Password = brokerOptions.Password,
             ManagedVirtualHosts = brokerOptions.VirtualHosts,
         });
+
+    private static Application.Models.TopologyDocument AttachBroker(
+        Application.Models.TopologyDocument document,
+        BrokerOptions brokerOptions)
+        => document with
+        {
+            Broker = new Application.Models.BrokerDocument
+            {
+                ManagementUrl = brokerOptions.ManagementUrl,
+                Username = brokerOptions.Username,
+                Password = brokerOptions.Password,
+                VirtualHosts = brokerOptions.VirtualHosts.ToArray(),
+            },
+        };
 
     private async Task<Application.Models.TopologyDocument> ParseTopologyDocumentAsync(
         Stream stream,
