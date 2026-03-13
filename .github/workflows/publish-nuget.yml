@@ -106,12 +106,17 @@ jobs:
             -c Release --no-build \
             --logger "console;verbosity=normal"
 
-      # Pack the all-in-one runtime package.
+      # Pack the all-in-one runtime package and the CLI dotnet tool package.
       # Internal runtime projects are included in the package output through the main project.
       - name: Pack
         run: |
           VERSION=${{ steps.version.outputs.VERSION }}
           dotnet pack src/SphereRabbitMQ.DependencyInjection/SphereRabbitMQ.DependencyInjection.csproj \
+            -c Release \
+            --no-restore \
+            -p:Version=$VERSION \
+            --output nupkgs
+          dotnet pack src/SphereRabbitMQ.IaC.Cli/SphereRabbitMQ.IaC.Cli.csproj \
             -c Release \
             --no-restore \
             -p:Version=$VERSION \

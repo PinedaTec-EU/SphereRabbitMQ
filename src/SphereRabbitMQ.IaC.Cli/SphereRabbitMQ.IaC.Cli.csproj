@@ -8,7 +8,13 @@
     <FileVersion>$(ReleaseVersion)</FileVersion>
     <Version>$(ReleaseVersion)</Version>
     <RootNamespace>SphereRabbitMQ.IaC.Cli</RootNamespace>
+    <PackageId>SphereRabbitMQ.IaC.Tool</PackageId>
+    <Title>SphereRabbitMQ IaC Tool</Title>
     <Description>Command-line entry point for RabbitMQ topology infrastructure as code.</Description>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>sprmq</ToolCommandName>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>
 
   <ItemGroup>
@@ -17,5 +23,10 @@
     <ProjectReference Include="..\SphereRabbitMQ.IaC.Application\SphereRabbitMQ.IaC.Application.csproj" />
     <ProjectReference Include="..\SphereRabbitMQ.IaC.Infrastructure.RabbitMQ\SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.csproj" />
     <ProjectReference Include="..\SphereRabbitMQ.IaC.Infrastructure.Yaml\SphereRabbitMQ.IaC.Infrastructure.Yaml.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\docs\cli.md" Pack="true" PackagePath="\" Link="README.md" />
+    <None Include="..\..\LICENSE.txt" Pack="true" PackagePath="\" Link="LICENSE.txt" />
   </ItemGroup>
 </Project>
