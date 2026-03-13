@@ -2,7 +2,7 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <AssemblyName>SphereRabbitMQ.DependencyInjection</AssemblyName>
-    <ReleaseVersion>0.1.2.63</ReleaseVersion>
+    <ReleaseVersion>0.1.2.66</ReleaseVersion>
     <AssemblyVersion>$(ReleaseVersion)</AssemblyVersion>
     <FileVersion>$(ReleaseVersion)</FileVersion>
     <Version>$(ReleaseVersion)</Version>
