@@ -42,6 +42,12 @@ public sealed class TopologyYamlDocumentWriter : ITopologyDocumentWriter
                     Password = document.Broker.Password,
                     VirtualHosts = document.Broker.VirtualHosts.ToList(),
                 },
+            Decommission = document.Decommission is null
+                ? null
+                : new DecommissionYamlDocument
+                {
+                    VirtualHosts = document.Decommission.VirtualHosts.Select(MapDecommissionVirtualHost).ToList(),
+                },
             Metadata = new Dictionary<string, string>(document.Metadata, StringComparer.Ordinal),
             Naming = document.Naming is null
                 ? null
@@ -67,6 +73,15 @@ public sealed class TopologyYamlDocumentWriter : ITopologyDocumentWriter
             Metadata = new Dictionary<string, string>(document.Metadata, StringComparer.Ordinal),
             Exchanges = document.Exchanges.Select(MapExchange).ToList(),
             Queues = document.Queues.Select(MapQueue).ToList(),
+            Bindings = document.Bindings.Select(MapBinding).ToList(),
+        };
+
+    private static DecommissionVirtualHostYamlDocument MapDecommissionVirtualHost(DecommissionVirtualHostDocument document)
+        => new()
+        {
+            Name = document.Name,
+            Exchanges = document.Exchanges.ToList(),
+            Queues = document.Queues.ToList(),
             Bindings = document.Bindings.Select(MapBinding).ToList(),
         };
 

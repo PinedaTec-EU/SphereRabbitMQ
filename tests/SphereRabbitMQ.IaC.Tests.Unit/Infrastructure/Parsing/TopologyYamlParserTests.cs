@@ -116,4 +116,51 @@ public sealed class TopologyYamlParserTests
     Assert.True(queue.Arguments.ContainsKey("payload"));
     Assert.Null(queue.Arguments["payload"]);
   }
+
+  [Fact]
+  public async Task ParseAsync_MapsDecommissionSection_AndResolvesVariables()
+  {
+    var variableResolverMock = new Mock<IVariableResolver>(MockBehavior.Strict);
+    variableResolverMock
+      .Setup(resolver => resolver.Resolve(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string?>>(), true))
+      .Returns<string, IReadOnlyDictionary<string, string?>, bool>((value, variables, _) =>
+        variables.Aggregate(value, (current, variable) => current.Replace($"${{{variable.Key}}}", variable.Value ?? string.Empty, StringComparison.Ordinal)));
+
+    ITopologyParser topologyParser = new TopologyYamlParser(variableResolverMock.Object);
+    var yaml = """
+        variables:
+          VHOST_NAME: sales
+          LEGACY_EXCHANGE: orders.legacy
+        virtualHosts:
+          - name: ${VHOST_NAME}
+            exchanges:
+              - name: orders.current
+        decommission:
+          virtualHosts:
+            - name: ${VHOST_NAME}
+              exchanges:
+                - ${LEGACY_EXCHANGE}
+              queues:
+                - orders.legacy.queue
+              bindings:
+                - sourceExchange: ${LEGACY_EXCHANGE}
+                  destination: orders.legacy.queue
+                  destinationType: queue
+                  routingKey: orders.legacy
+        """;
+
+    await using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(yaml));
+    var topologyDocument = await topologyParser.ParseAsync(stream);
+
+    Assert.NotNull(topologyDocument.Decommission);
+    var decommission = Assert.Single(topologyDocument.Decommission!.VirtualHosts);
+    Assert.Equal("sales", decommission.Name);
+    Assert.Equal("orders.legacy", Assert.Single(decommission.Exchanges));
+    Assert.Equal("orders.legacy.queue", Assert.Single(decommission.Queues));
+    var binding = Assert.Single(decommission.Bindings);
+    Assert.Equal("orders.legacy", binding.SourceExchange);
+    Assert.Equal("orders.legacy.queue", binding.Destination);
+    Assert.Equal("queue", binding.DestinationType);
+    Assert.Equal("orders.legacy", binding.RoutingKey);
+  }
 }

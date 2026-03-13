@@ -46,6 +46,7 @@ public sealed class TopologyYamlParser : ITopologyParser
         => document with
         {
             Broker = ResolveBroker(document.Broker, document.Variables),
+            Decommission = ResolveDecommission(document.Decommission, document.Variables),
             DebugQueues = ResolveDebugQueues(document.DebugQueues, document.Variables),
             Metadata = ResolveStringDictionary(document.Metadata, document.Variables),
             Variables = ResolveNullableStringDictionary(document.Variables, document.Variables),
@@ -75,6 +76,27 @@ public sealed class TopologyYamlParser : ITopologyParser
             Metadata = ResolveStringDictionary(document.Metadata, variables),
             Exchanges = document.Exchanges.Select(exchange => ResolveExchange(exchange, variables)).ToList(),
             Queues = document.Queues.Select(queue => ResolveQueue(queue, variables)).ToList(),
+            Bindings = document.Bindings.Select(binding => ResolveBinding(binding, variables)).ToList(),
+        };
+
+    private DecommissionYamlDocument? ResolveDecommission(
+        DecommissionYamlDocument? document,
+        IReadOnlyDictionary<string, string?> variables)
+        => document is null
+            ? null
+            : document with
+            {
+                VirtualHosts = document.VirtualHosts.Select(vhost => ResolveDecommissionVirtualHost(vhost, variables)).ToList(),
+            };
+
+    private DecommissionVirtualHostYamlDocument ResolveDecommissionVirtualHost(
+        DecommissionVirtualHostYamlDocument document,
+        IReadOnlyDictionary<string, string?> variables)
+        => document with
+        {
+            Name = Resolve(document.Name, variables),
+            Exchanges = document.Exchanges.Select(exchange => Resolve(exchange, variables)).ToList(),
+            Queues = document.Queues.Select(queue => Resolve(queue, variables)).ToList(),
             Bindings = document.Bindings.Select(binding => ResolveBinding(binding, variables)).ToList(),
         };
 

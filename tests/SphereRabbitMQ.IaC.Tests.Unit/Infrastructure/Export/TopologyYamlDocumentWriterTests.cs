@@ -19,6 +19,17 @@ public sealed class TopologyYamlDocumentWriterTests
                 Password = "guest",
                 VirtualHosts = ["sales"],
             },
+            Decommission = new DecommissionDocument
+            {
+                VirtualHosts =
+                [
+                    new DecommissionVirtualHostDocument
+                    {
+                        Name = "sales",
+                        Exchanges = ["orders.legacy"],
+                    },
+                ],
+            },
             Metadata = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["team"] = "sales",
@@ -129,6 +140,8 @@ public sealed class TopologyYamlDocumentWriterTests
         Assert.Contains("password: guest", yaml, StringComparison.Ordinal);
         Assert.Contains("metadata:", yaml, StringComparison.Ordinal);
         Assert.Contains("team: sales", yaml, StringComparison.Ordinal);
+        Assert.Contains("decommission:", yaml, StringComparison.Ordinal);
+        Assert.Contains("orders.legacy", yaml, StringComparison.Ordinal);
         Assert.Contains("naming:", yaml, StringComparison.Ordinal);
         Assert.Contains("retryExchangeSuffix: retry", yaml, StringComparison.Ordinal);
         Assert.Contains("deadLetterExchangeSuffix: dlx", yaml, StringComparison.Ordinal);

@@ -161,7 +161,7 @@ public sealed class RabbitMqManagementTopologyApplier : ITopologyApplier
                 await _apiClient.DeleteQueueAsync(virtualHostName, pathSegments[^1], cancellationToken);
                 break;
             case TopologyResourceKind.Binding:
-                await _apiClient.DeleteBindingAsync(virtualHostName, FindBinding(desired, virtualHostName, pathSegments[^1]), cancellationToken);
+                await _apiClient.DeleteBindingAsync(virtualHostName, FindBindingForDestroy(desired, virtualHostName, pathSegments[^1]), cancellationToken);
                 break;
             default:
                 throw new InvalidOperationException($"Resource kind '{operation.ResourceKind}' is not supported.");
@@ -278,7 +278,7 @@ public sealed class RabbitMqManagementTopologyApplier : ITopologyApplier
     {
         if (_queueMessageMover is not null)
         {
-            await _queueMessageMover.MoveAsync(sourceQueueName, destinationQueueName, cancellationToken);
+            await _queueMessageMover.MoveAsync(virtualHostName, sourceQueueName, destinationQueueName, cancellationToken);
             return;
         }
 
@@ -491,6 +491,24 @@ public sealed class RabbitMqManagementTopologyApplier : ITopologyApplier
 
     private static BindingDefinition FindBinding(TopologyDefinition desired, string virtualHostName, string bindingKey)
         => desired.VirtualHosts.Single(vhost => vhost.Name == virtualHostName).Bindings.Single(binding => binding.Key == bindingKey);
+
+    private static BindingDefinition FindBindingForDestroy(TopologyDefinition desired, string virtualHostName, string bindingKey)
+    {
+        var desiredBinding = desired.VirtualHosts
+            .Where(vhost => vhost.Name == virtualHostName)
+            .SelectMany(vhost => vhost.Bindings)
+            .FirstOrDefault(binding => binding.Key == bindingKey);
+
+        if (desiredBinding is not null)
+        {
+            return desiredBinding;
+        }
+
+        return desired.Decommission
+            .Where(vhost => vhost.Name == virtualHostName)
+            .SelectMany(vhost => vhost.Bindings)
+            .Single(binding => binding.Key == bindingKey);
+    }
 
     private sealed record MigrationPlan(
         IReadOnlyList<TopologyPlanOperation> SafeOperations,

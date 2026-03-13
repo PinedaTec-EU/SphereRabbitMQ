@@ -22,6 +22,12 @@ public static class YamlTopologyDocumentMapper
                     Password = yamlDocument.Broker.Password,
                     VirtualHosts = yamlDocument.Broker.VirtualHosts.ToArray(),
                 },
+            Decommission = yamlDocument.Decommission is null
+                ? null
+                : new DecommissionDocument
+                {
+                    VirtualHosts = yamlDocument.Decommission.VirtualHosts.Select(Map).ToArray(),
+                },
             DebugQueues = yamlDocument.DebugQueues is null
                 ? null
                 : new DebugQueuesDocument
@@ -52,6 +58,15 @@ public static class YamlTopologyDocumentMapper
             Metadata = new Dictionary<string, string>(yamlDocument.Metadata, StringComparer.Ordinal),
             Exchanges = yamlDocument.Exchanges.Select(Map).ToArray(),
             Queues = yamlDocument.Queues.Select(Map).ToArray(),
+            Bindings = yamlDocument.Bindings.Select(Map).ToArray(),
+        };
+
+    private static DecommissionVirtualHostDocument Map(DecommissionVirtualHostYamlDocument yamlDocument)
+        => new()
+        {
+            Name = yamlDocument.Name,
+            Exchanges = yamlDocument.Exchanges.ToArray(),
+            Queues = yamlDocument.Queues.ToArray(),
             Bindings = yamlDocument.Bindings.Select(Map).ToArray(),
         };
 

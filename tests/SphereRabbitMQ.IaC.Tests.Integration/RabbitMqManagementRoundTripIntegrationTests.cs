@@ -126,6 +126,61 @@ public sealed class RabbitMqManagementRoundTripIntegrationTests
     }
 
     [RabbitMqConfiguredFact]
+    public async Task Apply_DecommissionsLegacyExchangeAndBinding_WithoutBlockingWarningsAsync()
+    {
+        await _fixture.ResetVirtualHostAsync();
+
+        var ordersCreatedQueue = new QueueDefinition(
+            "orders.created",
+            QueueType.Classic,
+            durable: true,
+            arguments: new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["x-queue-type"] = "classic",
+            });
+
+        var initialTopology = new TopologyDefinition(
+        [
+            new VirtualHostDefinition(
+                _fixture.VirtualHostName,
+                exchanges: [new ExchangeDefinition("orders.legacy", ExchangeType.Topic)],
+                queues: [ordersCreatedQueue],
+                bindings: [new BindingDefinition("orders.legacy", "orders.created", routingKey: "orders.created")]),
+        ]);
+        var initialPlan = await _fixture.TopologyPlanner.PlanAsync(initialTopology, new TopologyDefinition([]));
+        await _fixture.TopologyApplier.ApplyAsync(initialTopology, initialPlan);
+
+        var actualTopology = await _fixture.BrokerTopologyReader.ReadAsync();
+        var desiredTopology = new TopologyDefinition(
+        [
+            new VirtualHostDefinition(
+                _fixture.VirtualHostName,
+                exchanges: [new ExchangeDefinition("orders.current", ExchangeType.Topic)],
+                queues: [ordersCreatedQueue],
+                bindings: [new BindingDefinition("orders.current", "orders.created", routingKey: "orders.created")]),
+        ],
+        [
+            new DecommissionVirtualHostDefinition(
+                _fixture.VirtualHostName,
+                exchanges: ["orders.legacy"],
+                bindings: [new BindingDefinition("orders.legacy", "orders.created", routingKey: "orders.created")]),
+        ]);
+
+        var plan = await _fixture.TopologyPlanner.PlanAsync(desiredTopology, actualTopology);
+
+        Assert.Empty(plan.DestructiveChanges);
+        await _fixture.TopologyApplier.ApplyAsync(desiredTopology, plan);
+
+        var actualAfterApply = await _fixture.BrokerTopologyReader.ReadAsync();
+        var virtualHost = actualAfterApply.VirtualHosts.Single();
+
+        Assert.Contains(virtualHost.Exchanges, exchange => exchange.Name == "orders.current");
+        Assert.DoesNotContain(virtualHost.Exchanges, exchange => exchange.Name == "orders.legacy");
+        Assert.Contains(virtualHost.Bindings, binding => binding.SourceExchange == "orders.current");
+        Assert.DoesNotContain(virtualHost.Bindings, binding => binding.SourceExchange == "orders.legacy");
+    }
+
+    [RabbitMqConfiguredFact]
     public async Task DestroyDryRun_DoesNotRemoveResourcesAsync()
     {
         await _fixture.ResetVirtualHostAsync();
@@ -698,7 +753,7 @@ public sealed class RabbitMqManagementRoundTripIntegrationTests
         private readonly TaskCompletionSource _releaseFirstMove = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private int _moveCalls;
 
-        public async ValueTask MoveAsync(string sourceQueueName, string destinationQueueName, CancellationToken cancellationToken = default)
+        public async ValueTask MoveAsync(string virtualHostName, string sourceQueueName, string destinationQueueName, CancellationToken cancellationToken = default)
         {
             if (Interlocked.Increment(ref _moveCalls) == 1)
             {

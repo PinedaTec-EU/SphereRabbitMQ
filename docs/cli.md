@@ -143,6 +143,51 @@ Operational rules:
 
 If `--migrate` is not specified, the CLI keeps the current safe behavior and fails when an incompatible queue or exchange already exists on the broker.
 
+### Safe Renames And Cleanup
+
+Renaming an exchange or queue is not an in-place update in RabbitMQ. Treat it as a staged migration:
+
+1. add the new resource to `virtualHosts`
+2. bind existing queues or exchanges to the new resource
+3. move publishers and consumers
+4. explicitly retire the old resource through `decommission`
+
+`decommission` is an explicit cleanup allowlist. Resources declared there are removed during `apply` without being reported as blocking destructive drift, and missing resources are treated as a no-op.
+
+Example:
+
+```yaml
+virtualHosts:
+  - name: sales
+    exchanges:
+      - name: orders.current
+        type: topic
+    queues:
+      - name: orders.created
+    bindings:
+      - sourceExchange: orders.current
+        destination: orders.created
+        destinationType: queue
+        routingKey: orders.created
+
+decommission:
+  virtualHosts:
+    - name: sales
+      exchanges:
+        - orders.legacy
+      bindings:
+        - sourceExchange: orders.legacy
+          destination: orders.created
+          destinationType: queue
+          routingKey: orders.created
+```
+
+Recommended lifecycle:
+
+- release 1: create the new resource and keep the old one working
+- release 2: add the old resource under `decommission`
+- release 3: remove the `decommission` entry once cleanup is complete and no longer needs to be tracked
+
 Operational consequences:
 
 - `--migrate` is destructive by design for incompatible resources

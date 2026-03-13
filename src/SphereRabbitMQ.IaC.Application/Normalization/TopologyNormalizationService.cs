@@ -23,6 +23,7 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
             .Select(vhost => NormalizeVirtualHost(vhost, document.DebugQueues, namingPolicy, issues))
             .OrderBy(vhost => vhost.Name, StringComparer.Ordinal)
             .ToArray();
+        var decommission = NormalizeDecommission(document.Decommission, issues);
 
         if (issues.Count > 0)
         {
@@ -31,6 +32,7 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
 
         return ValueTask.FromResult(new TopologyDefinition(
             virtualHosts,
+            decommission,
             namingPolicy,
             NormalizeStringDictionary(document.Metadata)));
     }
@@ -145,6 +147,32 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
             NormalizeObjectDictionary(document.Arguments),
             NormalizeStringDictionary(document.Metadata));
     }
+
+    private static IReadOnlyList<DecommissionVirtualHostDefinition> NormalizeDecommission(
+        DecommissionDocument? document,
+        ICollection<TopologyIssue> issues)
+        => document?.VirtualHosts
+            .Select(vhost => NormalizeDecommissionVirtualHost(vhost, issues))
+            .OrderBy(vhost => vhost.Name, StringComparer.Ordinal)
+            .ToArray() ?? Array.Empty<DecommissionVirtualHostDefinition>();
+
+    private static DecommissionVirtualHostDefinition NormalizeDecommissionVirtualHost(
+        DecommissionVirtualHostDocument document,
+        ICollection<TopologyIssue> issues)
+        => new(
+            document.Name.Trim(),
+            document.Exchanges
+                .Select(exchange => exchange.Trim())
+                .OrderBy(exchange => exchange, StringComparer.Ordinal)
+                .ToArray(),
+            document.Queues
+                .Select(queue => queue.Trim())
+                .OrderBy(queue => queue, StringComparer.Ordinal)
+                .ToArray(),
+            document.Bindings
+                .Select(binding => NormalizeBinding(document.Name, binding, issues))
+                .OrderBy(binding => binding.Key, StringComparer.Ordinal)
+                .ToArray());
 
     private static void AppendDerivedArtifacts(
         QueueDefinition queue,

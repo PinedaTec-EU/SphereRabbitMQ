@@ -114,4 +114,31 @@ public sealed class TopologyDefinitionTests
         Assert.False(result.IsValid);
         Assert.Contains(result.Issues, issue => issue.Code == "retry-requires-dead-letter");
     }
+
+    [Fact]
+    public void Validate_ReturnsError_WhenDecommissionConflictsWithDesiredResources()
+    {
+        var topology = new TopologyDefinition(
+        [
+            new VirtualHostDefinition(
+                "sales",
+                exchanges: [new ExchangeDefinition("orders", ExchangeType.Topic)],
+                queues: [new QueueDefinition("orders.created")],
+                bindings: [new BindingDefinition("orders", "orders.created", routingKey: "orders.created")]),
+        ],
+        [
+            new DecommissionVirtualHostDefinition(
+                "sales",
+                exchanges: ["orders"],
+                queues: ["orders.created"],
+                bindings: [new BindingDefinition("orders", "orders.created", routingKey: "orders.created")]),
+        ]);
+
+        var result = topology.Validate();
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Issues, issue => issue.Code == "decommission-exchange-conflict");
+        Assert.Contains(result.Issues, issue => issue.Code == "decommission-queue-conflict");
+        Assert.Contains(result.Issues, issue => issue.Code == "decommission-binding-conflict");
+    }
 }

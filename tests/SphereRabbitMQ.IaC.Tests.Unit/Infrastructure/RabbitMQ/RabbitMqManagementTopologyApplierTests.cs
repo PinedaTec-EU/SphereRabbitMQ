@@ -99,6 +99,48 @@ public sealed class RabbitMqManagementTopologyApplierTests
         Assert.Equal(1, migrationLock.ReleasedCount);
     }
 
+    [Fact]
+    public async Task ApplyAsync_DeletesDecommissionedResources_FromExplicitDestroyOperations()
+    {
+        var apiClientMock = new Mock<IRabbitMqManagementApiClient>(MockBehavior.Strict);
+        apiClientMock.Setup(client => client.DeleteBindingAsync("sales", It.Is<BindingDefinition>(binding => binding.SourceExchange == "orders.legacy"), It.IsAny<CancellationToken>())).Returns(ValueTask.CompletedTask);
+        apiClientMock.Setup(client => client.DeleteExchangeAsync("sales", "orders.legacy", It.IsAny<CancellationToken>())).Returns(ValueTask.CompletedTask);
+
+        ITopologyApplier topologyApplier = new RabbitMqManagementTopologyApplier(apiClientMock.Object);
+        var desiredTopology = new TopologyDefinition(
+        [
+            new VirtualHostDefinition(
+                "sales",
+                exchanges: [new ExchangeDefinition("orders.current", ExchangeType.Topic)],
+                queues: [new QueueDefinition("orders.created")],
+                bindings: [new BindingDefinition("orders.current", "orders.created", routingKey: "orders.created")]),
+        ],
+        [
+            new DecommissionVirtualHostDefinition(
+                "sales",
+                exchanges: ["orders.legacy"],
+                bindings: [new BindingDefinition("orders.legacy", "orders.created", routingKey: "orders.created")]),
+        ]);
+        var topologyPlan = new TopologyPlan(
+        [
+            new TopologyPlanOperation(
+                TopologyPlanOperationKind.Destroy,
+                TopologyResourceKind.Binding,
+                "/virtualHosts/sales/bindings/orders.legacy|Queue|orders.created|orders.created",
+                "Decommission binding 'orders.legacy|Queue|orders.created|orders.created'."),
+            new TopologyPlanOperation(
+                TopologyPlanOperationKind.Destroy,
+                TopologyResourceKind.Exchange,
+                "/virtualHosts/sales/exchanges/orders.legacy",
+                "Decommission exchange 'orders.legacy'."),
+        ]);
+
+        await topologyApplier.ApplyAsync(desiredTopology, topologyPlan);
+
+        apiClientMock.Verify(client => client.DeleteBindingAsync("sales", It.Is<BindingDefinition>(binding => binding.SourceExchange == "orders.legacy"), It.IsAny<CancellationToken>()), Times.Once);
+        apiClientMock.Verify(client => client.DeleteExchangeAsync("sales", "orders.legacy", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     private sealed class FakeTopologyMigrationLock : ITopologyMigrationLock
     {
         public List<string> AcquiredVirtualHosts { get; } = [];

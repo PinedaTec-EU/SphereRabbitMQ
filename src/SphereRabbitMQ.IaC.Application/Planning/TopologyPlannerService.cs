@@ -24,8 +24,10 @@ public sealed class TopologyPlannerService : ITopologyPlanner
         var operations = new List<TopologyPlanOperation>();
         var unsupportedChanges = new List<UnsupportedChange>();
         var destructiveChanges = new List<DestructiveChangeWarning>();
+        var decommissionByVirtualHost = desired.Decommission.ToDictionary(vhost => vhost.Name, StringComparer.Ordinal);
 
-        CompareVirtualHosts(desired, actual, operations, unsupportedChanges, destructiveChanges);
+        CompareVirtualHosts(desired, actual, decommissionByVirtualHost, operations, unsupportedChanges, destructiveChanges);
+        AppendDecommissionOperations(actual, decommissionByVirtualHost, operations);
 
         var orderedOperations = operations
             .OrderBy(operation => operation.ResourcePath, StringComparer.Ordinal)
@@ -38,6 +40,7 @@ public sealed class TopologyPlannerService : ITopologyPlanner
     private static void CompareVirtualHosts(
         TopologyDefinition desired,
         TopologyDefinition actual,
+        IReadOnlyDictionary<string, DecommissionVirtualHostDefinition> decommissionByVirtualHost,
         ICollection<TopologyPlanOperation> operations,
         ICollection<UnsupportedChange> unsupportedChanges,
         ICollection<DestructiveChangeWarning> destructiveChanges)
@@ -52,9 +55,10 @@ public sealed class TopologyPlannerService : ITopologyPlanner
                 continue;
             }
 
-            CompareExchanges(desiredVirtualHost, actualVirtualHost, operations, unsupportedChanges, destructiveChanges);
-            CompareQueues(desiredVirtualHost, actualVirtualHost, operations, unsupportedChanges, destructiveChanges);
-            CompareBindings(desiredVirtualHost, actualVirtualHost, operations, destructiveChanges);
+            decommissionByVirtualHost.TryGetValue(desiredVirtualHost.Name, out var decommissionVirtualHost);
+            CompareExchanges(desiredVirtualHost, actualVirtualHost, decommissionVirtualHost, operations, unsupportedChanges, destructiveChanges);
+            CompareQueues(desiredVirtualHost, actualVirtualHost, decommissionVirtualHost, operations, unsupportedChanges, destructiveChanges);
+            CompareBindings(desiredVirtualHost, actualVirtualHost, decommissionVirtualHost, operations, destructiveChanges);
         }
 
         foreach (var actualVirtualHost in actual.VirtualHosts.Where(vhost => desired.VirtualHosts.All(desiredVHost => desiredVHost.Name != vhost.Name)))
@@ -107,6 +111,7 @@ public sealed class TopologyPlannerService : ITopologyPlanner
     private static void CompareExchanges(
         VirtualHostDefinition desired,
         VirtualHostDefinition actual,
+        DecommissionVirtualHostDefinition? decommission,
         ICollection<TopologyPlanOperation> operations,
         ICollection<UnsupportedChange> unsupportedChanges,
         ICollection<DestructiveChangeWarning> destructiveChanges)
@@ -147,7 +152,9 @@ public sealed class TopologyPlannerService : ITopologyPlanner
                 diffs));
         }
 
-        foreach (var actualExchange in actual.Exchanges.Where(exchange => desired.Exchanges.All(desiredExchange => desiredExchange.Name != exchange.Name)))
+        foreach (var actualExchange in actual.Exchanges.Where(exchange =>
+                     desired.Exchanges.All(desiredExchange => desiredExchange.Name != exchange.Name) &&
+                     !IsDecommissionedExchange(decommission, exchange.Name)))
         {
             AddDestructiveOperation(
                 operations,
@@ -161,6 +168,7 @@ public sealed class TopologyPlannerService : ITopologyPlanner
     private static void CompareQueues(
         VirtualHostDefinition desired,
         VirtualHostDefinition actual,
+        DecommissionVirtualHostDefinition? decommission,
         ICollection<TopologyPlanOperation> operations,
         ICollection<UnsupportedChange> unsupportedChanges,
         ICollection<DestructiveChangeWarning> destructiveChanges)
@@ -213,7 +221,9 @@ public sealed class TopologyPlannerService : ITopologyPlanner
                 diffs));
         }
 
-        foreach (var actualQueue in actual.Queues.Where(queue => desired.Queues.All(desiredQueue => desiredQueue.Name != queue.Name)))
+        foreach (var actualQueue in actual.Queues.Where(queue =>
+                     desired.Queues.All(desiredQueue => desiredQueue.Name != queue.Name) &&
+                     !IsDecommissionedQueue(decommission, queue.Name)))
         {
             AddDestructiveOperation(
                 operations,
@@ -227,6 +237,7 @@ public sealed class TopologyPlannerService : ITopologyPlanner
     private static void CompareBindings(
         VirtualHostDefinition desired,
         VirtualHostDefinition actual,
+        DecommissionVirtualHostDefinition? decommission,
         ICollection<TopologyPlanOperation> operations,
         ICollection<DestructiveChangeWarning> destructiveChanges)
     {
@@ -255,7 +266,9 @@ public sealed class TopologyPlannerService : ITopologyPlanner
                 diffs));
         }
 
-        foreach (var actualBinding in actual.Bindings.Where(binding => desired.Bindings.All(desiredBinding => desiredBinding.Key != binding.Key)))
+        foreach (var actualBinding in actual.Bindings.Where(binding =>
+                     desired.Bindings.All(desiredBinding => desiredBinding.Key != binding.Key) &&
+                     !IsDecommissionedBinding(decommission, binding.Key)))
         {
             AddDestructiveOperation(
                 operations,
@@ -265,6 +278,91 @@ public sealed class TopologyPlannerService : ITopologyPlanner
                 $"Binding '{actualBinding.Key}' exists on the broker but not in the desired topology.");
         }
     }
+
+    private static void AppendDecommissionOperations(
+        TopologyDefinition actual,
+        IReadOnlyDictionary<string, DecommissionVirtualHostDefinition> decommissionByVirtualHost,
+        ICollection<TopologyPlanOperation> operations)
+    {
+        var actualVirtualHosts = actual.VirtualHosts.ToDictionary(vhost => vhost.Name, StringComparer.Ordinal);
+
+        foreach (var decommissionVirtualHost in decommissionByVirtualHost.Values.OrderBy(vhost => vhost.Name, StringComparer.Ordinal))
+        {
+            actualVirtualHosts.TryGetValue(decommissionVirtualHost.Name, out var actualVirtualHost);
+            AppendDecommissionExchangeOperations(decommissionVirtualHost, actualVirtualHost, operations);
+            AppendDecommissionQueueOperations(decommissionVirtualHost, actualVirtualHost, operations);
+            AppendDecommissionBindingOperations(decommissionVirtualHost, actualVirtualHost, operations);
+        }
+    }
+
+    private static void AppendDecommissionExchangeOperations(
+        DecommissionVirtualHostDefinition decommissionVirtualHost,
+        VirtualHostDefinition? actualVirtualHost,
+        ICollection<TopologyPlanOperation> operations)
+    {
+        foreach (var exchangeName in decommissionVirtualHost.Exchanges.OrderBy(name => name, StringComparer.Ordinal))
+        {
+            var resourcePath = $"/virtualHosts/{decommissionVirtualHost.Name}/exchanges/{exchangeName}";
+            operations.Add(new TopologyPlanOperation(
+                actualVirtualHost?.Exchanges.Any(exchange => string.Equals(exchange.Name, exchangeName, StringComparison.Ordinal)) == true
+                    ? TopologyPlanOperationKind.Destroy
+                    : TopologyPlanOperationKind.NoOp,
+                TopologyResourceKind.Exchange,
+                resourcePath,
+                actualVirtualHost?.Exchanges.Any(exchange => string.Equals(exchange.Name, exchangeName, StringComparison.Ordinal)) == true
+                    ? $"Decommission exchange '{exchangeName}'."
+                    : $"Exchange '{exchangeName}' is already absent."));
+        }
+    }
+
+    private static void AppendDecommissionQueueOperations(
+        DecommissionVirtualHostDefinition decommissionVirtualHost,
+        VirtualHostDefinition? actualVirtualHost,
+        ICollection<TopologyPlanOperation> operations)
+    {
+        foreach (var queueName in decommissionVirtualHost.Queues.OrderBy(name => name, StringComparer.Ordinal))
+        {
+            var resourcePath = $"/virtualHosts/{decommissionVirtualHost.Name}/queues/{queueName}";
+            operations.Add(new TopologyPlanOperation(
+                actualVirtualHost?.Queues.Any(queue => string.Equals(queue.Name, queueName, StringComparison.Ordinal)) == true
+                    ? TopologyPlanOperationKind.Destroy
+                    : TopologyPlanOperationKind.NoOp,
+                TopologyResourceKind.Queue,
+                resourcePath,
+                actualVirtualHost?.Queues.Any(queue => string.Equals(queue.Name, queueName, StringComparison.Ordinal)) == true
+                    ? $"Decommission queue '{queueName}'."
+                    : $"Queue '{queueName}' is already absent."));
+        }
+    }
+
+    private static void AppendDecommissionBindingOperations(
+        DecommissionVirtualHostDefinition decommissionVirtualHost,
+        VirtualHostDefinition? actualVirtualHost,
+        ICollection<TopologyPlanOperation> operations)
+    {
+        foreach (var binding in decommissionVirtualHost.Bindings.OrderBy(candidate => candidate.Key, StringComparer.Ordinal))
+        {
+            var resourcePath = $"/virtualHosts/{decommissionVirtualHost.Name}/bindings/{binding.Key}";
+            operations.Add(new TopologyPlanOperation(
+                actualVirtualHost?.Bindings.Any(candidate => string.Equals(candidate.Key, binding.Key, StringComparison.Ordinal)) == true
+                    ? TopologyPlanOperationKind.Destroy
+                    : TopologyPlanOperationKind.NoOp,
+                TopologyResourceKind.Binding,
+                resourcePath,
+                actualVirtualHost?.Bindings.Any(candidate => string.Equals(candidate.Key, binding.Key, StringComparison.Ordinal)) == true
+                    ? $"Decommission binding '{binding.Key}'."
+                    : $"Binding '{binding.Key}' is already absent."));
+        }
+    }
+
+    private static bool IsDecommissionedExchange(DecommissionVirtualHostDefinition? decommission, string exchangeName)
+        => decommission?.Exchanges.Any(candidate => string.Equals(candidate, exchangeName, StringComparison.Ordinal)) == true;
+
+    private static bool IsDecommissionedQueue(DecommissionVirtualHostDefinition? decommission, string queueName)
+        => decommission?.Queues.Any(candidate => string.Equals(candidate, queueName, StringComparison.Ordinal)) == true;
+
+    private static bool IsDecommissionedBinding(DecommissionVirtualHostDefinition? decommission, string bindingKey)
+        => decommission?.Bindings.Any(candidate => string.Equals(candidate.Key, bindingKey, StringComparison.Ordinal)) == true;
 
     private static List<TopologyDiff> BuildExchangeDiffs(ExchangeDefinition desired, ExchangeDefinition actual, string resourcePath)
     {

@@ -12,6 +12,8 @@ public sealed record TopologyYamlDocument
 
     public List<VirtualHostYamlDocument> VirtualHosts { get; init; } = new();
 
+    public DecommissionYamlDocument? Decommission { get; init; }
+
     public DebugQueuesYamlDocument? DebugQueues { get; init; }
 
     public NamingConventionYamlDocument? Naming { get; init; }

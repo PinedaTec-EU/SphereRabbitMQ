@@ -9,15 +9,19 @@ public sealed record TopologyDefinition
 {
     public TopologyDefinition(
         IReadOnlyList<VirtualHostDefinition> virtualHosts,
+        IReadOnlyList<DecommissionVirtualHostDefinition>? decommission = null,
         NamingConventionPolicy? namingPolicy = null,
         IReadOnlyDictionary<string, string>? metadata = null)
     {
         VirtualHosts = Guard.AgainstNull(virtualHosts, nameof(virtualHosts));
+        Decommission = decommission ?? Array.Empty<DecommissionVirtualHostDefinition>();
         NamingPolicy = namingPolicy ?? NamingConventionPolicy.Default;
         Metadata = metadata ?? new Dictionary<string, string>(StringComparer.Ordinal);
     }
 
     public IReadOnlyList<VirtualHostDefinition> VirtualHosts { get; }
+
+    public IReadOnlyList<DecommissionVirtualHostDefinition> Decommission { get; }
 
     public NamingConventionPolicy NamingPolicy { get; }
 
@@ -42,9 +46,28 @@ public sealed record TopologyDefinition
                 TopologyIssueSeverity.Error));
         }
 
+        var duplicateDecommissionVirtualHosts = Decommission
+            .GroupBy(vhost => vhost.Name, StringComparer.Ordinal)
+            .Where(group => group.Count() > 1);
+
+        foreach (var group in duplicateDecommissionVirtualHosts)
+        {
+            issues.Add(new TopologyIssue(
+                "duplicate-decommission-vhost",
+                $"Decommission virtual host '{group.Key}' is declared more than once.",
+                $"/decommission/virtualHosts/{group.Key}",
+                TopologyIssueSeverity.Error));
+        }
+
         foreach (var virtualHost in VirtualHosts)
         {
             ValidateVirtualHost(virtualHost, NamingPolicy, issues);
+        }
+
+        var virtualHostsByName = VirtualHosts.ToDictionary(vhost => vhost.Name, StringComparer.Ordinal);
+        foreach (var decommissionVirtualHost in Decommission)
+        {
+            ValidateDecommissionVirtualHost(decommissionVirtualHost, virtualHostsByName, issues);
         }
 
         return issues.Count == 0
@@ -235,6 +258,69 @@ public sealed record TopologyDefinition
             }
 
             RegisterGeneratedName(step.QueueName ?? namingPolicy.GetRetryQueueName(queueName, stepName), path, generatedNames, issues);
+        }
+    }
+
+    private static void ValidateDecommissionVirtualHost(
+        DecommissionVirtualHostDefinition decommissionVirtualHost,
+        IReadOnlyDictionary<string, VirtualHostDefinition> virtualHostsByName,
+        ICollection<TopologyIssue> issues)
+    {
+        var basePath = $"/decommission/virtualHosts/{decommissionVirtualHost.Name}";
+        ValidateDuplicateNames(
+            decommissionVirtualHost.Exchanges,
+            $"{basePath}/exchanges",
+            "exchange",
+            issues);
+        ValidateDuplicateNames(
+            decommissionVirtualHost.Queues,
+            $"{basePath}/queues",
+            "queue",
+            issues);
+        ValidateDuplicateNames(
+            decommissionVirtualHost.Bindings.Select(binding => binding.Key),
+            $"{basePath}/bindings",
+            "binding",
+            issues);
+
+        if (!virtualHostsByName.TryGetValue(decommissionVirtualHost.Name, out var desiredVirtualHost))
+        {
+            issues.Add(new TopologyIssue(
+                "missing-decommission-vhost",
+                $"Decommission virtual host '{decommissionVirtualHost.Name}' must also exist in the desired topology.",
+                basePath,
+                TopologyIssueSeverity.Error));
+            return;
+        }
+
+        foreach (var exchangeName in decommissionVirtualHost.Exchanges.Where(exchangeName =>
+                     desiredVirtualHost.Exchanges.Any(exchange => string.Equals(exchange.Name, exchangeName, StringComparison.Ordinal))))
+        {
+            issues.Add(new TopologyIssue(
+                "decommission-exchange-conflict",
+                $"Exchange '{exchangeName}' cannot be declared and decommissioned at the same time.",
+                $"{basePath}/exchanges/{exchangeName}",
+                TopologyIssueSeverity.Error));
+        }
+
+        foreach (var queueName in decommissionVirtualHost.Queues.Where(queueName =>
+                     desiredVirtualHost.Queues.Any(queue => string.Equals(queue.Name, queueName, StringComparison.Ordinal))))
+        {
+            issues.Add(new TopologyIssue(
+                "decommission-queue-conflict",
+                $"Queue '{queueName}' cannot be declared and decommissioned at the same time.",
+                $"{basePath}/queues/{queueName}",
+                TopologyIssueSeverity.Error));
+        }
+
+        foreach (var binding in decommissionVirtualHost.Bindings.Where(binding =>
+                     desiredVirtualHost.Bindings.Any(candidate => string.Equals(candidate.Key, binding.Key, StringComparison.Ordinal))))
+        {
+            issues.Add(new TopologyIssue(
+                "decommission-binding-conflict",
+                $"Binding '{binding.Key}' cannot be declared and decommissioned at the same time.",
+                $"{basePath}/bindings/{binding.Key}",
+                TopologyIssueSeverity.Error));
         }
     }
 

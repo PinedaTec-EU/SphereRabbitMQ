@@ -12,6 +12,8 @@ public sealed record TopologyDocument
 
     public IReadOnlyList<VirtualHostDocument> VirtualHosts { get; init; } = Array.Empty<VirtualHostDocument>();
 
+    public DecommissionDocument? Decommission { get; init; }
+
     public DebugQueuesDocument? DebugQueues { get; init; }
 
     public NamingConventionDocument? Naming { get; init; }

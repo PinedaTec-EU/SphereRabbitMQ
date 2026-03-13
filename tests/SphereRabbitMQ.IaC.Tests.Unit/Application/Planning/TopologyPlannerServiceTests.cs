@@ -120,4 +120,79 @@ public sealed class TopologyPlannerServiceTests
 
         Assert.All(topologyPlan.Operations, operation => Assert.Equal(TopologyPlanOperationKind.NoOp, operation.Kind));
     }
+
+    [Fact]
+    public async Task PlanAsync_CreatesExplicitDestroyOperations_ForDecommissionedResourcesWithoutWarnings()
+    {
+        ITopologyPlanner topologyPlanner = new TopologyPlannerService();
+        var desiredTopology = new TopologyDefinition(
+        [
+            new VirtualHostDefinition(
+                "sales",
+                exchanges: [new ExchangeDefinition("orders.current", ExchangeType.Topic)],
+                queues: [new QueueDefinition("orders.created")],
+                bindings: [new BindingDefinition("orders.current", "orders.created", routingKey: "orders.created")]),
+        ],
+        [
+            new DecommissionVirtualHostDefinition(
+                "sales",
+                exchanges: ["orders.legacy"],
+                bindings: [new BindingDefinition("orders.legacy", "orders.created", routingKey: "orders.created")]),
+        ]);
+        var actualTopology = new TopologyDefinition(
+        [
+            new VirtualHostDefinition(
+                "sales",
+                exchanges:
+                [
+                    new ExchangeDefinition("orders.current", ExchangeType.Topic),
+                    new ExchangeDefinition("orders.legacy", ExchangeType.Topic),
+                ],
+                queues: [new QueueDefinition("orders.created")],
+                bindings:
+                [
+                    new BindingDefinition("orders.current", "orders.created", routingKey: "orders.created"),
+                    new BindingDefinition("orders.legacy", "orders.created", routingKey: "orders.created"),
+                ]),
+        ]);
+
+        var topologyPlan = await topologyPlanner.PlanAsync(desiredTopology, actualTopology);
+
+        Assert.Empty(topologyPlan.DestructiveChanges);
+        Assert.DoesNotContain(topologyPlan.Operations, operation => operation.Kind == TopologyPlanOperationKind.DestructiveChange);
+        Assert.Contains(topologyPlan.Operations, operation =>
+            operation.Kind == TopologyPlanOperationKind.Destroy &&
+            operation.ResourceKind == TopologyResourceKind.Exchange &&
+            operation.ResourcePath == "/virtualHosts/sales/exchanges/orders.legacy");
+        Assert.Contains(topologyPlan.Operations, operation =>
+            operation.Kind == TopologyPlanOperationKind.Destroy &&
+            operation.ResourceKind == TopologyResourceKind.Binding &&
+            operation.ResourcePath == "/virtualHosts/sales/bindings/orders.legacy|Queue|orders.created|orders.created");
+    }
+
+    [Fact]
+    public async Task PlanAsync_UsesNoOp_WhenDecommissionedResourceIsAlreadyAbsent()
+    {
+        ITopologyPlanner topologyPlanner = new TopologyPlannerService();
+        var desiredTopology = new TopologyDefinition(
+        [
+            new VirtualHostDefinition("sales"),
+        ],
+        [
+            new DecommissionVirtualHostDefinition(
+                "sales",
+                exchanges: ["orders.legacy"]),
+        ]);
+        var actualTopology = new TopologyDefinition(
+        [
+            new VirtualHostDefinition("sales"),
+        ]);
+
+        var topologyPlan = await topologyPlanner.PlanAsync(desiredTopology, actualTopology);
+
+        Assert.Contains(topologyPlan.Operations, operation =>
+            operation.Kind == TopologyPlanOperationKind.NoOp &&
+            operation.ResourceKind == TopologyResourceKind.Exchange &&
+            operation.ResourcePath == "/virtualHosts/sales/exchanges/orders.legacy");
+    }
 }
