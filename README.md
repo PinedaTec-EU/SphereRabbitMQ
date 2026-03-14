@@ -38,6 +38,7 @@ Distribution:
 Runtime library for:
 
 - publishing messages to existing exchanges
+- publishing with either a configured default routing key or a per-call routing-key override
 - consuming from existing queues
 - broker-based retry forwarding
 - dead-letter forwarding

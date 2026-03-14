@@ -55,6 +55,35 @@ public sealed class RabbitMqTypedPublisherIntegrationTests
         Assert.Equal(1u, await CountMessagesAsync("orders.created"));
     }
 
+    [Fact]
+    public async Task PublishAsync_AllowsRoutingKeyOverride_WhenDefaultRoutingKeyIsNotConfigured()
+    {
+        if (!_fixture.IsAvailable)
+        {
+            return;
+        }
+
+        var services = new ServiceCollection();
+        services.AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance);
+        services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
+        services.AddSphereRabbitMq(options =>
+        {
+            options.SetConnectionString(_fixture.CreateConnectionString());
+        });
+        services.AddRabbitPublisher<OrderCreated>(config =>
+        {
+            config.ToExchange(PublisherExchangeName);
+        });
+
+        await using var provider = services.BuildServiceProvider();
+        var publisher = provider.GetRequiredService<IMessagePublisher<OrderCreated>>();
+        await PurgeQueuesAsync("orders.created");
+
+        await publisher.PublishAsync(OrderCreatedRoutingKey, new OrderCreated("typed-order-override"));
+
+        Assert.Equal(1u, await CountMessagesAsync("orders.created"));
+    }
+
     private async Task PurgeQueuesAsync(params string[] queues)
     {
         await using var connection = await _fixture.CreateConnectionFactory().CreateConnectionAsync();

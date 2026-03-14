@@ -25,16 +25,20 @@ public sealed class RabbitPublisherServiceCollectionExtensionsTests
     }
 
     [Fact]
-    public void AddRabbitPublisher_Throws_WhenRoutingKeyIsMissing()
+    public void AddRabbitPublisher_AllowsMissingRoutingKey()
     {
         var services = new ServiceCollection();
+        services.AddSingleton(new Mock<IRabbitMQPublisher>().Object);
 
-        var exception = Assert.Throws<InvalidOperationException>(() => services.AddRabbitPublisher<string>(config =>
+        services.AddRabbitPublisher<string>(config =>
         {
             config.ToExchange(OrdersExchangeName);
-        }));
+        });
 
-        Assert.Equal("Rabbit publisher 'String' requires a routing key.", exception.Message);
+        using var provider = services.BuildServiceProvider();
+        var publisher = provider.GetRequiredService<IMessagePublisher<string>>();
+
+        Assert.NotNull(publisher);
     }
 
     [Fact]
@@ -99,6 +103,85 @@ public sealed class RabbitPublisherServiceCollectionExtensionsTests
             OrdersExchangeName,
             HighPriorityRoutingKey,
             It.Is<OrderCreated>(message => message.OrderId == "order-2"),
+            null,
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task PublishAsync_Throws_WhenDefaultRoutingKeyIsMissing()
+    {
+        var rawPublisherMock = new Mock<IRabbitMQPublisher>(MockBehavior.Strict);
+
+        var services = new ServiceCollection();
+        services.AddSingleton(rawPublisherMock.Object);
+        services.AddRabbitPublisher<OrderCreated>(config =>
+        {
+            config.ToExchange(OrdersExchangeName);
+        });
+
+        await using var provider = services.BuildServiceProvider();
+        var publisher = provider.GetRequiredService<IMessagePublisher<OrderCreated>>();
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => publisher.PublishAsync(new OrderCreated("order-3")));
+
+        Assert.Equal(
+            "Rabbit publisher 'OrderCreated' does not have a default routing key configured. Use PublishAsync(routingKey, message, ...) or configure WithRoutingKey(...).",
+            exception.Message);
+        rawPublisherMock.VerifyNoOtherCalls();
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    public async Task PublishAsync_Throws_WhenRoutingKeyOverrideIsBlank(string routingKey)
+    {
+        var rawPublisherMock = new Mock<IRabbitMQPublisher>(MockBehavior.Strict);
+
+        var services = new ServiceCollection();
+        services.AddSingleton(rawPublisherMock.Object);
+        services.AddRabbitPublisher<OrderCreated>(config =>
+        {
+            config.ToExchange(OrdersExchangeName);
+        });
+
+        await using var provider = services.BuildServiceProvider();
+        var publisher = provider.GetRequiredService<IMessagePublisher<OrderCreated>>();
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() => publisher.PublishAsync(routingKey, new OrderCreated("order-4")));
+
+        Assert.Equal("routingKey", exception.ParamName);
+        rawPublisherMock.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task PublishAsync_AllowsRoutingKeyOverride_WhenDefaultRoutingKeyIsMissing()
+    {
+        var rawPublisherMock = new Mock<IRabbitMQPublisher>();
+        rawPublisherMock
+            .Setup(publisher => publisher.PublishAsync(
+                OrdersExchangeName,
+                HighPriorityRoutingKey,
+                It.IsAny<OrderCreated>(),
+                It.IsAny<PublishOptions?>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var services = new ServiceCollection();
+        services.AddSingleton(rawPublisherMock.Object);
+        services.AddRabbitPublisher<OrderCreated>(config =>
+        {
+            config.ToExchange(OrdersExchangeName);
+        });
+
+        await using var provider = services.BuildServiceProvider();
+        var publisher = provider.GetRequiredService<IMessagePublisher<OrderCreated>>();
+
+        await publisher.PublishAsync(HighPriorityRoutingKey, new OrderCreated("order-5"));
+
+        rawPublisherMock.Verify(publisher => publisher.PublishAsync(
+            OrdersExchangeName,
+            HighPriorityRoutingKey,
+            It.Is<OrderCreated>(message => message.OrderId == "order-5"),
             null,
             It.IsAny<CancellationToken>()), Times.Once);
     }

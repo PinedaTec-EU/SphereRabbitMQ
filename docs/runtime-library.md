@@ -103,6 +103,19 @@ public sealed record OrderCreated(string OrderId);
 
 If a flow needs to publish the same message type to a different broker route, `IMessagePublisher<TMessage>` also supports an explicit routing-key overload while keeping the configured exchange fixed.
 
+The default routing key is optional. You can register a typed publisher with just the exchange and provide the routing key per call:
+
+```csharp
+services.AddRabbitPublisher<OrderCreated>(config =>
+{
+    config.ToExchange(ordersExchangeName);
+});
+
+await publisher.PublishAsync("orders.created.high", new OrderCreated("order-43"));
+```
+
+If no default routing key was configured, calling `PublishAsync(message)` throws an `InvalidOperationException`. Passing a null, empty, or whitespace routing-key override throws an `ArgumentException`.
+
 ## Subscriber Example
 
 ```csharp
@@ -214,6 +227,7 @@ With RabbitMQ `direct` and `topic` exchanges, broker routing is driven by the pu
 That means:
 
 - use the configured publisher route by default, or override the routing key explicitly when a flow needs a different broker route
+- if you omit the default routing key during registration, every publish call must provide a non-empty routing-key override
 - use message headers for metadata and processing context
 - use a `headers` exchange in topology only when broker-side header routing is explicitly desired
 

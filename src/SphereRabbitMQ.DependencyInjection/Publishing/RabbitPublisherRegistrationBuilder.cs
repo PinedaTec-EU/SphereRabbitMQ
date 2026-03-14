@@ -4,7 +4,7 @@ public sealed class RabbitPublisherRegistrationBuilder<TMessage>
 {
     public string Exchange { get; private set; } = string.Empty;
 
-    public string RoutingKey { get; private set; } = string.Empty;
+    public string? RoutingKey { get; private set; }
 
     public RabbitPublisherRegistrationBuilder<TMessage> ToExchange(string exchange)
     {
@@ -25,9 +25,5 @@ public sealed class RabbitPublisherRegistrationBuilder<TMessage>
             throw new InvalidOperationException($"Rabbit publisher '{typeof(TMessage).Name}' requires an exchange.");
         }
 
-        if (string.IsNullOrWhiteSpace(RoutingKey))
-        {
-            throw new InvalidOperationException($"Rabbit publisher '{typeof(TMessage).Name}' requires a routing key.");
-        }
     }
 }
