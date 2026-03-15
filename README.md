@@ -87,6 +87,33 @@ If any expected topology is missing, the runtime fails explicitly with a diagnos
 7. Start application code with `SphereRabbitMQ`.
 8. Publish and consume only against pre-existing broker resources.
 
+## Runtime Configuration Sources
+
+`AddSphereRabbitMq()` can resolve runtime connection settings from environment variables even when the configuration delegate is omitted.
+
+Recognized variables:
+
+- `SPHERE_RABBITMQ_CONNECTION_STRING`
+- `SPHERE_RABBITMQ_AMQP_HOST`
+- `SPHERE_RABBITMQ_AMQP_PORT`
+- `SPHERE_RABBITMQ_AMQP_VHOST`
+- `SPHERE_RABBITMQ_USERNAME`
+- `SPHERE_RABBITMQ_PASSWORD`
+- `SPHERE_RABBITMQ_MANAGEMENT_URL` as a host fallback when `SPHERE_RABBITMQ_AMQP_HOST` is not set
+
+Precedence is:
+
+1. explicit `AddSphereRabbitMq(options => ...)` configuration
+2. `SPHERE_RABBITMQ_CONNECTION_STRING`
+3. granular `SPHERE_RABBITMQ_AMQP_*` plus credentials
+4. built-in defaults (`localhost:5672`, `guest/guest`, `/`)
+
+Example without an explicit delegate:
+
+```csharp
+services.AddSphereRabbitMq();
+```
+
 ## Runtime Error Model
 
 Subscriber handlers may fail in three distinct ways:
