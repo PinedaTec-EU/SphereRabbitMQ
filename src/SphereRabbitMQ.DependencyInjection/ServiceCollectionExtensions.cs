@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using SphereRabbitMQ.Abstractions.Configuration;
 using SphereRabbitMQ.Abstractions.Subscribers;
 using SphereRabbitMQ.Abstractions.Publishing;
@@ -27,6 +28,7 @@ public static class ServiceCollectionExtensions
         Action<SphereRabbitMqOptions>? configure = null)
     {
         services.AddOptions<SphereRabbitMqOptions>();
+        services.AddSingleton<IConfigureOptions<SphereRabbitMqOptions>, EnvironmentVariableSphereRabbitMqOptionsConfigurator>();
         if (configure is not null)
         {
             services.Configure(configure);

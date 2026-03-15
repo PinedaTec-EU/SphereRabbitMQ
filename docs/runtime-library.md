@@ -101,6 +101,33 @@ public sealed record OrderCreated(string OrderId);
 
 `IRabbitMQPublisher` remains available as the low-level API for dynamic or infrastructure-heavy scenarios. The recommended application-facing API is `IMessagePublisher<TMessage>`.
 
+## Runtime Configuration Sources
+
+`AddSphereRabbitMq()` now resolves runtime connection settings from environment variables even when the delegate is omitted.
+
+Recognized variables:
+
+- `SPHERE_RABBITMQ_CONNECTION_STRING`
+- `SPHERE_RABBITMQ_AMQP_HOST`
+- `SPHERE_RABBITMQ_AMQP_PORT`
+- `SPHERE_RABBITMQ_AMQP_VHOST`
+- `SPHERE_RABBITMQ_USERNAME`
+- `SPHERE_RABBITMQ_PASSWORD`
+- `SPHERE_RABBITMQ_MANAGEMENT_URL` as a host fallback when `SPHERE_RABBITMQ_AMQP_HOST` is not set
+
+Precedence is:
+
+1. explicit `AddSphereRabbitMq(options => ...)` configuration
+2. `SPHERE_RABBITMQ_CONNECTION_STRING`
+3. granular `SPHERE_RABBITMQ_AMQP_*` plus credentials
+4. built-in defaults (`localhost:5672`, `guest/guest`, `/`)
+
+Example without an explicit delegate:
+
+```csharp
+services.AddSphereRabbitMq();
+```
+
 If a flow needs to publish the same message type to a different broker route, `IMessagePublisher<TMessage>` also supports an explicit routing-key overload while keeping the configured exchange fixed.
 
 The default routing key is optional. You can register a typed publisher with just the exchange and provide the routing key per call:
