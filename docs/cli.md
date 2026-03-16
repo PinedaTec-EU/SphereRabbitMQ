@@ -91,6 +91,30 @@ sprmq init --template debug --output-file -
 
 The same templates are also checked into the repository under `samples/templates/` for direct reuse and review.
 
+## YAML IntelliSense
+
+Sample topology files already include a schema reference comment so editors can provide key completion, enum suggestions, and validation while you type.
+
+Examples:
+
+```yaml
+# yaml-language-server: $schema=./topology.schema.json
+virtualHosts:
+  - name: sales
+```
+
+```yaml
+# yaml-language-server: $schema=../topology.schema.json
+virtualHosts:
+  - name: sales
+```
+
+Schema location in this repository:
+
+- `samples/topology.schema.json`
+
+This is especially useful in VS Code with the YAML language support extension, where typing at root level immediately suggests keys like `broker`, `virtualHosts`, `debugQueues`, `decommission`, and `naming`.
+
 ### `validate`
 
 Validates YAML syntax, normalization, and semantic consistency.
