@@ -55,6 +55,7 @@ public sealed class TopologyNormalizationServiceTests
         Assert.Equal(["audit", "events", "orders.retry"], topologyDefinition.VirtualHosts[1].Exchanges.Select(exchange => exchange.Name).ToArray());
         Assert.Contains(topologyDefinition.VirtualHosts[1].Queues, queue => queue.Name == "audit.debug");
         Assert.Contains(topologyDefinition.VirtualHosts[1].Queues, queue => queue.Name == "events.debug");
+        Assert.DoesNotContain(topologyDefinition.VirtualHosts[1].Queues, queue => queue.Name == "orders.retry.debug");
         Assert.Contains(topologyDefinition.VirtualHosts[1].Bindings, binding => binding.Destination == "events.debug" && binding.RoutingKey == "#");
         Assert.Equal(
             ExchangeType.Topic,
@@ -305,6 +306,86 @@ public sealed class TopologyNormalizationServiceTests
         Assert.Equal("orders.consume", delayQueue.Arguments["x-dead-letter-routing-key"]);
         Assert.DoesNotContain(virtualHost.Exchanges, exchange => exchange.Name == "orders.delay.dlx");
         Assert.DoesNotContain(virtualHost.Queues, queue => queue.Name == "orders.consume.dlq");
+    }
+
+    [Fact]
+    public async Task NormalizeAsync_GeneratesDebugArtifacts_OnlyForSelectedExchangesAndQueues()
+    {
+        ITopologyNormalizer topologyNormalizer = new TopologyNormalizationService();
+        var topologyDocument = new TopologyDocument
+        {
+            DebugQueues = new DebugQueuesDocument
+            {
+                Enabled = true,
+                Exchanges = new DebugQueueScopeDocument
+                {
+                    Main = true,
+                    Secondary = false,
+                },
+                Queues = new DebugQueueScopeDocument
+                {
+                    Main = true,
+                    Secondary = false,
+                },
+            },
+            VirtualHosts =
+            [
+                new VirtualHostDocument
+                {
+                    Name = "sales",
+                    Exchanges =
+                    [
+                        new ExchangeDocument { Name = "orders", Type = "topic" },
+                        new ExchangeDocument { Name = "payments", Type = "topic" },
+                    ],
+                    Queues =
+                    [
+                        new QueueDocument { Name = "orders.created", Type = "classic" },
+                        new QueueDocument { Name = "payments.created", Type = "classic" },
+                    ],
+                    Bindings =
+                    [
+                        new BindingDocument
+                        {
+                            SourceExchange = "orders",
+                            Destination = "orders.created",
+                            DestinationType = "queue",
+                            RoutingKey = "orders.created",
+                        },
+                        new BindingDocument
+                        {
+                            SourceExchange = "payments",
+                            Destination = "payments.created",
+                            DestinationType = "queue",
+                            RoutingKey = "payments.created",
+                        },
+                    ],
+                },
+            ],
+        };
+
+        var topologyDefinition = await topologyNormalizer.NormalizeAsync(topologyDocument);
+        var virtualHost = topologyDefinition.VirtualHosts.Single();
+
+        Assert.Contains(virtualHost.Queues, queue => queue.Name == "orders.debug");
+        Assert.Contains(virtualHost.Queues, queue => queue.Name == "payments.debug");
+        Assert.Contains(virtualHost.Queues, queue => queue.Name == "orders.created.debug");
+        Assert.Contains(virtualHost.Queues, queue => queue.Name == "payments.created.debug");
+
+        Assert.Contains(virtualHost.Bindings, binding =>
+            binding.SourceExchange == "orders" &&
+            binding.Destination == "orders.debug" &&
+            binding.RoutingKey == "#");
+
+        Assert.Contains(virtualHost.Bindings, binding =>
+            binding.SourceExchange == "orders" &&
+            binding.Destination == "orders.created.debug" &&
+            binding.RoutingKey == "orders.created");
+
+        Assert.Contains(virtualHost.Bindings, binding =>
+            binding.SourceExchange == "payments" &&
+            binding.Destination == "payments.created.debug" &&
+            binding.RoutingKey == "payments.created");
     }
 
     [Fact]

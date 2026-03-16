@@ -64,7 +64,11 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
 
         AppendDebugArtifacts(
             debugQueues,
-            explicitExchanges.Concat(generatedExchanges),
+            explicitExchanges,
+            generatedExchanges,
+            explicitQueues,
+            generatedQueues,
+            explicitBindings.Concat(generatedBindings),
             generatedQueues,
             generatedBindings);
 
@@ -244,20 +248,84 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
 
     private static void AppendDebugArtifacts(
         DebugQueuesDocument? debugQueues,
-        IEnumerable<ExchangeDefinition> exchanges,
-        ICollection<QueueDefinition> queues,
-        ICollection<BindingDefinition> bindings)
+        IReadOnlyCollection<ExchangeDefinition> mainExchanges,
+        IReadOnlyCollection<ExchangeDefinition> secondaryExchanges,
+        IReadOnlyCollection<QueueDefinition> mainQueues,
+        IReadOnlyCollection<QueueDefinition> secondaryQueues,
+        IEnumerable<BindingDefinition> existingBindings,
+        ICollection<QueueDefinition> generatedQueues,
+        ICollection<BindingDefinition> generatedBindings)
     {
         if (debugQueues is not { Enabled: true })
         {
             return;
         }
 
-        foreach (var exchange in exchanges.OrderBy(exchange => exchange.Name, StringComparer.Ordinal))
+        var selectedExchanges = SelectByScope(debugQueues.Exchanges, mainExchanges, secondaryExchanges)
+            .OrderBy(exchange => exchange.Name, StringComparer.Ordinal)
+            .ToArray();
+        var selectedQueues = SelectByScope(debugQueues.Queues, mainQueues, secondaryQueues)
+            .OrderBy(queue => queue.Name, StringComparer.Ordinal)
+            .ToArray();
+        var allQueues = mainQueues
+            .Concat(secondaryQueues)
+            .ToArray();
+        var allBindings = existingBindings.ToArray();
+        var generatedQueuesByName = new HashSet<string>(
+            allQueues.Select(queue => queue.Name),
+            StringComparer.Ordinal);
+        var generatedBindingKeys = new HashSet<string>(
+            allBindings.Select(binding => binding.Key),
+            StringComparer.Ordinal);
+
+        foreach (var exchange in selectedExchanges)
         {
             var debugQueueName = $"{exchange.Name}.{debugQueues.QueueSuffix}";
-            queues.Add(CreateGeneratedDebugQueue(debugQueueName, exchange.Name));
-            bindings.Add(CreateGeneratedDebugBinding(exchange.Name, debugQueueName));
+            if (generatedQueuesByName.Add(debugQueueName))
+            {
+                generatedQueues.Add(CreateGeneratedDebugQueueForExchange(debugQueueName, exchange.Name));
+            }
+
+            var debugBinding = CreateGeneratedDebugBindingForExchange(exchange.Name, debugQueueName);
+            if (generatedBindingKeys.Add(debugBinding.Key))
+            {
+                generatedBindings.Add(debugBinding);
+            }
+        }
+
+        foreach (var queue in selectedQueues)
+        {
+            var queueBindings = allBindings
+                .Where(binding =>
+                    binding.DestinationType == BindingDestinationType.Queue &&
+                    string.Equals(binding.Destination, queue.Name, StringComparison.Ordinal))
+                .OrderBy(binding => binding.Key, StringComparer.Ordinal)
+                .ToArray();
+
+            if (queueBindings.Length == 0)
+            {
+                continue;
+            }
+
+            var debugQueueName = $"{queue.Name}.{debugQueues.QueueSuffix}";
+            if (generatedQueuesByName.Add(debugQueueName))
+            {
+                generatedQueues.Add(CreateGeneratedDebugQueueForQueue(debugQueueName, queue.Name));
+            }
+
+            foreach (var queueBinding in queueBindings)
+            {
+                var debugBinding = CreateGeneratedDebugBindingForQueue(
+                    queueBinding.SourceExchange,
+                    debugQueueName,
+                    queueBinding.RoutingKey,
+                    queue.Name);
+
+                if (generatedBindingKeys.Add(debugBinding.Key))
+                {
+                    generatedBindings.Add(debugBinding);
+                }
+            }
         }
     }
 
@@ -294,7 +362,7 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
             metadata: CreateGeneratedMetadata(sourceQueueName));
     }
 
-    private static QueueDefinition CreateGeneratedDebugQueue(
+    private static QueueDefinition CreateGeneratedDebugQueueForExchange(
         string queueName,
         string sourceExchangeName)
     {
@@ -313,6 +381,25 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
             CreateGeneratedExchangeMetadata(sourceExchangeName));
     }
 
+    private static QueueDefinition CreateGeneratedDebugQueueForQueue(
+        string queueName,
+        string sourceQueueName)
+    {
+        var arguments = new Dictionary<string, object?>(StringComparer.Ordinal);
+        EnsureQueueTypeArgument(QueueType.Classic, arguments);
+
+        return new QueueDefinition(
+            queueName,
+            QueueType.Classic,
+            true,
+            false,
+            false,
+            arguments,
+            null,
+            null,
+            CreateGeneratedMetadata(sourceQueueName));
+    }
+
     private static BindingDefinition CreateGeneratedBinding(
         string sourceExchange,
         string destinationQueue,
@@ -325,7 +412,7 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
             routingKey,
             metadata: CreateGeneratedMetadata(sourceQueueName));
 
-    private static BindingDefinition CreateGeneratedDebugBinding(
+    private static BindingDefinition CreateGeneratedDebugBindingForExchange(
         string sourceExchange,
         string destinationQueue)
         => new(
@@ -334,6 +421,25 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
             BindingDestinationType.Queue,
             TopologyNormalizationConsts.DebugQueueRoutingKey,
             metadata: CreateGeneratedExchangeMetadata(sourceExchange));
+
+    private static BindingDefinition CreateGeneratedDebugBindingForQueue(
+        string sourceExchange,
+        string destinationQueue,
+        string routingKey,
+        string sourceQueueName)
+        => new(
+            sourceExchange,
+            destinationQueue,
+            BindingDestinationType.Queue,
+            routingKey,
+            metadata: CreateGeneratedMetadata(sourceQueueName));
+
+    private static IEnumerable<TArtifact> SelectByScope<TArtifact>(
+        DebugQueueScopeDocument scope,
+        IEnumerable<TArtifact> mainArtifacts,
+        IEnumerable<TArtifact> secondaryArtifacts)
+        => (scope.Main ? mainArtifacts : Array.Empty<TArtifact>())
+            .Concat(scope.Secondary ? secondaryArtifacts : Array.Empty<TArtifact>());
 
     private static IReadOnlyDictionary<string, string> CreateGeneratedMetadata(string sourceQueueName)
         => new Dictionary<string, string>(StringComparer.Ordinal)
