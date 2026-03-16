@@ -54,6 +54,32 @@ public sealed record NamingConventionPolicy
     public string GetRetryStepToken(int index)
         => $"{StepTokenPrefix}{index + 1}";
 
+    /// <summary>
+    /// Determines whether an exchange name belongs to the secondary retry/dead-letter naming flow.
+    /// </summary>
+    public bool IsSecondaryExchangeName(string exchangeName)
+    {
+        var separator = Guard.AgainstNullOrWhiteSpace(Separator, nameof(Separator));
+        var deadLetterSuffix = $"{separator}{Guard.AgainstNullOrWhiteSpace(DeadLetterExchangeSuffix, nameof(DeadLetterExchangeSuffix))}";
+        var retrySuffix = $"{separator}{Guard.AgainstNullOrWhiteSpace(RetryExchangeSuffix, nameof(RetryExchangeSuffix))}";
+
+        return exchangeName.EndsWith(deadLetterSuffix, StringComparison.Ordinal) ||
+               exchangeName.EndsWith(retrySuffix, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Determines whether a queue name belongs to the secondary retry/dead-letter naming flow.
+    /// </summary>
+    public bool IsSecondaryQueueName(string queueName)
+    {
+        var separator = Guard.AgainstNullOrWhiteSpace(Separator, nameof(Separator));
+        var deadLetterSuffix = $"{separator}{Guard.AgainstNullOrWhiteSpace(DeadLetterQueueSuffix, nameof(DeadLetterQueueSuffix))}";
+        var retryToken = $"{separator}{Guard.AgainstNullOrWhiteSpace(RetryQueueSuffix, nameof(RetryQueueSuffix))}{separator}";
+
+        return queueName.EndsWith(deadLetterSuffix, StringComparison.Ordinal) ||
+               queueName.Contains(retryToken, StringComparison.Ordinal);
+    }
+
     private string Join(params string[] segments)
     {
         ArgumentNullException.ThrowIfNull(segments);
