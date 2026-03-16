@@ -1,12 +1,14 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+
 using RabbitMQ.Client;
+
 using SphereRabbitMQ.Abstractions.Configuration;
 using SphereRabbitMQ.Infrastructure.RabbitMQ.Connection;
 
 namespace SphereRabbitMQ.Infrastructure.RabbitMQ.Publishing;
 
-public sealed class RabbitMqChannelPool : IAsyncDisposable
+internal sealed class RabbitMqChannelPool : IAsyncDisposable
 {
     private readonly SemaphoreSlim _channelLock = new(1, 1);
     private readonly ILogger<RabbitMqChannelPool> _logger;

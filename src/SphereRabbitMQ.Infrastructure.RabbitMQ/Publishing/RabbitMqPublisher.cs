@@ -1,7 +1,9 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+
 using RabbitMQ.Client;
 using RabbitMQ.Client.Exceptions;
+
 using SphereRabbitMQ.Abstractions.Configuration;
 using SphereRabbitMQ.Abstractions.Publishing;
 using SphereRabbitMQ.Abstractions.Serialization;
@@ -9,7 +11,7 @@ using SphereRabbitMQ.Domain.Publishing;
 
 namespace SphereRabbitMQ.Infrastructure.RabbitMQ.Publishing;
 
-public sealed class RabbitMqPublisher : IRabbitMQPublisher
+internal sealed class RabbitMqPublisher : IRabbitMQPublisher
 {
     private readonly IEnumerable<IRabbitMQPublisherFailureHandler> _failureHandlers;
     private readonly ILogger<RabbitMqPublisher> _logger;

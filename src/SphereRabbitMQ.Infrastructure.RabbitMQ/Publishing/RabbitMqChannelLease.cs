@@ -2,7 +2,7 @@ using RabbitMQ.Client;
 
 namespace SphereRabbitMQ.Infrastructure.RabbitMQ.Publishing;
 
-public sealed class RabbitMqChannelLease : IAsyncDisposable
+internal sealed class RabbitMqChannelLease : IAsyncDisposable
 {
     private readonly Func<IChannel, ValueTask> _returnAction;
 

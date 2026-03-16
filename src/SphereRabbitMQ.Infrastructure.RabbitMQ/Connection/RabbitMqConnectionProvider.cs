@@ -1,12 +1,13 @@
-using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+
 using RabbitMQ.Client;
+
 using SphereRabbitMQ.Abstractions.Configuration;
 
 namespace SphereRabbitMQ.Infrastructure.RabbitMQ.Connection;
 
-public sealed class RabbitMqConnectionProvider : IAsyncDisposable
+internal sealed class RabbitMqConnectionProvider : IAsyncDisposable
 {
     private readonly SemaphoreSlim _sync = new(1, 1);
     private readonly ILogger<RabbitMqConnectionProvider> _logger;

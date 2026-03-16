@@ -8,7 +8,7 @@ using SphereRabbitMQ.Infrastructure.RabbitMQ.Connection;
 
 namespace SphereRabbitMQ.Infrastructure.RabbitMQ.Topology;
 
-public sealed class RabbitMqTopologyValidator : IRabbitMqTopologyValidator
+internal sealed class RabbitMqTopologyValidator : IRabbitMqTopologyValidator
 {
     private readonly ILogger<RabbitMqTopologyValidator> _logger;
     private readonly SphereRabbitMqOptions _options;

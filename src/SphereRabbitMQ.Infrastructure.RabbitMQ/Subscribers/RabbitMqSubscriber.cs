@@ -1,21 +1,24 @@
-using System.Text;
 using System.Collections.Concurrent;
+using System.Text;
+
 using Microsoft.Extensions.Logging;
+
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using RabbitMQ.Client.Exceptions;
-using SphereRabbitMQ.Abstractions.Subscribers;
+
 using SphereRabbitMQ.Abstractions.Publishing;
 using SphereRabbitMQ.Abstractions.Serialization;
+using SphereRabbitMQ.Abstractions.Subscribers;
 using SphereRabbitMQ.Application.Serialization;
-using SphereRabbitMQ.Domain.Subscribers;
 using SphereRabbitMQ.Domain.Messaging;
 using SphereRabbitMQ.Domain.Retry;
+using SphereRabbitMQ.Domain.Subscribers;
 using SphereRabbitMQ.Infrastructure.RabbitMQ.Connection;
 
 namespace SphereRabbitMQ.Infrastructure.RabbitMQ.Subscribers;
 
-public sealed class RabbitMqSubscriber : IRabbitMQSubscriber
+internal sealed class RabbitMqSubscriber : IRabbitMQSubscriber
 {
     private readonly ISubscriberErrorStrategy _subscriberErrorStrategy;
     private readonly ISubscriberInfrastructureRouteResolver _subscriberInfrastructureRouteResolver;
