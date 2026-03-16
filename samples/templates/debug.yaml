@@ -1,22 +1,17 @@
 # yaml-language-server: $schema=../topology.schema.json
 debugQueues:
   enabled: true
-  queueSuffix: debug
-  exchanges:
-    main: true
-    secondary: false
-  queues:
-    main: true
-    secondary: false
 
 virtualHosts:
   - name: sales
     exchanges:
       - name: orders
         type: topic
+        debugQueue: true
     queues:
       - name: orders.created
         type: classic
+        debugQueue: true
     bindings:
       - sourceExchange: orders
         destination: orders.created

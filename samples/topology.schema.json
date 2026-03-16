@@ -143,18 +143,6 @@
                 }
             }
         },
-        "debugScope": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-                "main": {
-                    "type": "boolean"
-                },
-                "secondary": {
-                    "type": "boolean"
-                }
-            }
-        },
         "debugQueues": {
             "type": "object",
             "additionalProperties": false,
@@ -165,12 +153,6 @@
                 "queueSuffix": {
                     "type": "string",
                     "default": "debug"
-                },
-                "exchanges": {
-                    "$ref": "#/$defs/debugScope"
-                },
-                "queues": {
-                    "$ref": "#/$defs/debugScope"
                 }
             }
         },
@@ -203,6 +185,10 @@
                     "default": false
                 },
                 "internal": {
+                    "type": "boolean",
+                    "default": false
+                },
+                "debugQueue": {
                     "type": "boolean",
                     "default": false
                 },
@@ -394,6 +380,10 @@
                 "ttl": {
                     "type": "string",
                     "description": "Positive .NET TimeSpan, for example 00:10:00."
+                },
+                "debugQueue": {
+                    "type": "boolean",
+                    "default": false
                 },
                 "arguments": {
                     "$ref": "#/$defs/argumentMap"
