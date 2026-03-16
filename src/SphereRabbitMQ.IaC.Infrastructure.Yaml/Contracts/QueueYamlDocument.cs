@@ -20,6 +20,8 @@ public sealed record QueueYamlDocument
 
     public string? Ttl { get; init; }
 
+    public bool DebugQueue { get; init; }
+
     public Dictionary<string, object?> Arguments { get; init; } = new(StringComparer.Ordinal);
 
     public DeadLetterYamlDocument? DeadLetter { get; init; }

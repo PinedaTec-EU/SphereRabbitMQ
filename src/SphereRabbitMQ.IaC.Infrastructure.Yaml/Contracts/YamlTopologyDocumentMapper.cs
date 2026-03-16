@@ -34,16 +34,6 @@ public static class YamlTopologyDocumentMapper
                 {
                     Enabled = yamlDocument.DebugQueues.Enabled,
                     QueueSuffix = yamlDocument.DebugQueues.QueueSuffix,
-                    Exchanges = new DebugQueueScopeDocument
-                    {
-                        Main = yamlDocument.DebugQueues.Exchanges.Main,
-                        Secondary = yamlDocument.DebugQueues.Exchanges.Secondary,
-                    },
-                    Queues = new DebugQueueScopeDocument
-                    {
-                        Main = yamlDocument.DebugQueues.Queues.Main,
-                        Secondary = yamlDocument.DebugQueues.Queues.Secondary,
-                    },
                 },
             Metadata = new Dictionary<string, string>(yamlDocument.Metadata, StringComparer.Ordinal),
             Naming = yamlDocument.Naming is null
@@ -88,6 +78,7 @@ public static class YamlTopologyDocumentMapper
             Durable = yamlDocument.Durable,
             AutoDelete = yamlDocument.AutoDelete,
             Internal = yamlDocument.Internal,
+            DebugQueue = yamlDocument.DebugQueue,
             Arguments = new Dictionary<string, object?>(yamlDocument.Arguments, StringComparer.Ordinal),
             Metadata = new Dictionary<string, string>(yamlDocument.Metadata, StringComparer.Ordinal),
         };
@@ -101,6 +92,7 @@ public static class YamlTopologyDocumentMapper
             Exclusive = yamlDocument.Exclusive,
             AutoDelete = yamlDocument.AutoDelete,
             Ttl = yamlDocument.Ttl,
+            DebugQueue = yamlDocument.DebugQueue,
             Arguments = new Dictionary<string, object?>(yamlDocument.Arguments, StringComparer.Ordinal),
             Metadata = new Dictionary<string, string>(yamlDocument.Metadata, StringComparer.Ordinal),
             DeadLetter = yamlDocument.DeadLetter is null

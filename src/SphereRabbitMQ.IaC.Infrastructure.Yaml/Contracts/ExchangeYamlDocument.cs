@@ -18,6 +18,8 @@ public sealed record ExchangeYamlDocument
 
     public bool Internal { get; init; }
 
+    public bool DebugQueue { get; init; }
+
     public Dictionary<string, object?> Arguments { get; init; } = new(StringComparer.Ordinal);
 
     public Dictionary<string, string> Metadata { get; init; } = new(StringComparer.Ordinal);

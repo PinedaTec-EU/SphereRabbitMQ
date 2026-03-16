@@ -48,6 +48,13 @@ public sealed class TopologyYamlDocumentWriter : ITopologyDocumentWriter
                 {
                     VirtualHosts = document.Decommission.VirtualHosts.Select(MapDecommissionVirtualHost).ToList(),
                 },
+            DebugQueues = document.DebugQueues is null
+                ? null
+                : new DebugQueuesYamlDocument
+                {
+                    Enabled = document.DebugQueues.Enabled,
+                    QueueSuffix = document.DebugQueues.QueueSuffix,
+                },
             Metadata = new Dictionary<string, string>(document.Metadata, StringComparer.Ordinal),
             Naming = document.Naming is null
                 ? null
@@ -93,6 +100,7 @@ public sealed class TopologyYamlDocumentWriter : ITopologyDocumentWriter
             Durable = document.Durable,
             AutoDelete = document.AutoDelete,
             Internal = document.Internal,
+            DebugQueue = document.DebugQueue,
             Arguments = new Dictionary<string, object?>(document.Arguments, StringComparer.Ordinal),
             Metadata = new Dictionary<string, string>(document.Metadata, StringComparer.Ordinal),
         };
@@ -105,6 +113,7 @@ public sealed class TopologyYamlDocumentWriter : ITopologyDocumentWriter
             Durable = document.Durable,
             Exclusive = document.Exclusive,
             AutoDelete = document.AutoDelete,
+            DebugQueue = document.DebugQueue,
             Arguments = new Dictionary<string, object?>(document.Arguments, StringComparer.Ordinal),
             Metadata = new Dictionary<string, string>(document.Metadata, StringComparer.Ordinal),
             DeadLetter = document.DeadLetter is null
