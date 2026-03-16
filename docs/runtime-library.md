@@ -247,6 +247,33 @@ When dead-letter is configured for a subscriber, the runtime expects:
 
 If any of those are missing, `SubscribeAsync` fails explicitly.
 
+## YAML Delay Queue Pattern
+
+When topology is defined through `SphereRabbitMQ.IaC`, a delayed-delivery queue can dead-letter into the final consumer queue explicitly.
+
+Example:
+
+```yaml
+virtualHosts:
+  - name: sales
+    queues:
+      - name: orders.delay.5m
+        ttl: "00:05:00"
+        deadLetter:
+          enabled: true
+          destinationType: queue
+          queueName: orders.consume
+      - name: orders.consume
+```
+
+This means:
+
+- the application publishes to `orders.delay.5m`
+- RabbitMQ keeps the message for five minutes
+- after TTL expiration, RabbitMQ dead-letters it to `orders.consume`
+
+Although the intent looks like queue-to-queue routing, RabbitMQ executes this through dead-lettering plus the default exchange. The YAML keeps that intent explicit through `deadLetter.destinationType: queue`.
+
 ## Routing Notes
 
 With RabbitMQ `direct` and `topic` exchanges, broker routing is driven by the publish routing key, not by arbitrary message headers.
@@ -294,6 +321,48 @@ When enabled, the runtime derives the expected subscriber topology automatically
 This validation is read-only. It does not declare anything.
 
 If an application needs to inspect the derived internal names, it can resolve `ISubscriberInfrastructureRouteResolver` from DI and query them explicitly. Those names are discoverable, but not configurable through the public subscriber API.
+
+## Startup Initialization From YAML
+
+If a team wants topology reconciliation at application startup instead of only through CI/CD, use the IaC runtime integration package and register topology initialization from a YAML file.
+
+```csharp
+using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.DependencyInjection;
+
+services.AddSphereRabbitMqWithTopologyInitialization(
+    configureRabbitMq: options =>
+    {
+        options.SetConnectionString("amqp://user:pass@rabbitmq:5672/sales");
+    },
+    configureTopologyInitialization: options =>
+    {
+        options.YamlFilePath = "rabbitmq/topology.yaml";
+        // options.ManagementUrl = "http://rabbitmq:15672/api/";
+        // options.AllowMigrations = true;
+    });
+```
+
+If runtime registration already exists elsewhere, the initializer can be added separately:
+
+```csharp
+services.AddSphereRabbitMq(options =>
+{
+    options.SetConnectionString("amqp://user:pass@rabbitmq:5672/sales");
+});
+
+services.AddSphereRabbitMqTopologyInitialization(options =>
+{
+    options.YamlFilePath = "rabbitmq/topology.yaml";
+});
+```
+
+Behavior:
+
+- the YAML file is loaded before subscriber startup
+- a plan is built against the current broker state
+- safe changes are applied automatically
+- destructive or unsupported changes fail startup unless `AllowMigrations = true`
+- subscriber startup happens only after topology initialization completes
 
 ## Internal Message Moving
 

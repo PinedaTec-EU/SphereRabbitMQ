@@ -46,6 +46,84 @@ Runtime library for:
 
 Runtime documentation: [docs/runtime-library.md](/Users/jmr.pineda/Projects/GitHub/PinedaTec.eu/SphereRabbitMQ/docs/runtime-library.md)
 
+## YAML Dead-Letter To Another Queue
+
+For delayed delivery patterns, the YAML topology can declare a queue whose expired messages are dead-lettered directly into another queue.
+
+This is expressed explicitly as dead-lettering, not as a generic queue-to-queue binding.
+
+Example:
+
+```yaml
+virtualHosts:
+  - name: sales
+    queues:
+      - name: orders.delay.5m
+        ttl: "00:05:00"
+        deadLetter:
+          enabled: true
+          destinationType: queue
+          queueName: orders.consume
+      - name: orders.consume
+```
+
+Behavior:
+
+- `orders.delay.5m` keeps the message for `00:05:00`
+- once the TTL expires, RabbitMQ dead-letters the message through the default exchange
+- the message is routed into `orders.consume`
+
+Notes:
+
+- `destinationType: queue` requires `queueName`
+- this does not generate a dedicated DLX/DLQ pair
+- RabbitMQ still implements it internally through dead-lettering to the default exchange, not through a native queue-to-queue binding primitive
+
+## Startup Topology Initialization From YAML
+
+Applications that do not want to apply topology only through CI/CD can also load and apply the topology YAML during host startup.
+
+This capability is provided by the IaC runtime integration package and runs before subscriber startup.
+
+Example:
+
+```csharp
+using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.DependencyInjection;
+
+services.AddSphereRabbitMqWithTopologyInitialization(
+    configureRabbitMq: options =>
+    {
+        options.SetConnectionString("amqp://user:pass@rabbitmq:5672/sales");
+    },
+    configureTopologyInitialization: options =>
+    {
+        options.YamlFilePath = "rabbitmq/topology.yaml";
+        // options.ManagementUrl = "http://rabbitmq:15672/api/";
+        // options.AllowMigrations = true;
+    });
+```
+
+You can also keep the existing runtime registration and add the startup initializer separately:
+
+```csharp
+services.AddSphereRabbitMq(options =>
+{
+    options.SetConnectionString("amqp://user:pass@rabbitmq:5672/sales");
+});
+
+services.AddSphereRabbitMqTopologyInitialization(options =>
+{
+    options.YamlFilePath = "rabbitmq/topology.yaml";
+});
+```
+
+Operational rules:
+
+- the YAML file is parsed, normalized, validated, and planned before apply
+- if the plan contains destructive or unsupported changes, startup fails unless `AllowMigrations = true`
+- topology initialization runs before runtime topology validation and before subscribers begin consuming
+- this is intended for teams that want self-contained application startup instead of a separate topology deployment pipeline
+
 ## Core Rule
 
 The runtime library must never declare or modify RabbitMQ topology.
