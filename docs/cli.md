@@ -175,11 +175,13 @@ decommission:
     - name: sales
       exchanges:
         - orders.legacy
+      queues:
+        - orders.created.legacy
       bindings:
         - sourceExchange: orders.legacy
-          destination: orders.created
+          destination: orders.created.legacy
           destinationType: queue
-          routingKey: orders.created
+          routingKey: orders.created.legacy
 ```
 
 Recommended lifecycle:
@@ -340,20 +342,34 @@ naming:
 
 ### Debug queue generation
 
-The optional `debugQueues` block generates one debug queue per exchange in each managed virtual host.
+The optional `debugQueues` block can generate debug queues by exchange and/or by queue in each managed virtual host.
 
 ```yaml
 debugQueues:
   enabled: true
   queueSuffix: debug
+  exchanges:
+    main: true
+    secondary: false
+  queues:
+    main: true
+    secondary: false
 ```
 
-Debug queue conventions are fixed:
+Selection rules:
 
-- queue name: `<exchange>.<queueSuffix>`
+- `main`: artifacts declared directly in YAML (`virtualHosts[].exchanges[]` and `virtualHosts[].queues[]`).
+- `secondary`: generated artifacts (retry and dead-letter exchanges/queues).
+- defaults are `exchanges.main: true`, `exchanges.secondary: false`, `queues.main: false`, `queues.secondary: false`.
+
+Debug queue conventions are deterministic:
+
+- exchange debug queue name: `<exchange>.<queueSuffix>`
+- queue debug queue name: `<queue>.<queueSuffix>`
 - queue type: `classic`
 - queue durable: `true`
-- binding routing key: `#`
+- exchange debug binding routing key: `#`
+- queue debug bindings reuse each selected queue incoming binding routing key
 
 This keeps debug topology deterministic across environments.
 
@@ -421,12 +437,19 @@ Repository samples:
 
 - `samples/minimal-topology.yaml`
 - `samples/queue-ttl-and-debug-topology.yaml`
+- `samples/decommission-exchange-and-queue-topology.yaml`
 
 The second sample demonstrates:
 
 - implicit exchange defaults
 - queue TTL
 - generated debug queues
+
+The decommission sample demonstrates:
+
+- explicit cleanup of a legacy exchange
+- explicit cleanup of a legacy queue
+- cleanup of related legacy bindings
 
 ## Safe Execution Model
 

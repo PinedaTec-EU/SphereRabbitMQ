@@ -1,6 +1,12 @@
 debugQueues:
   enabled: true
   queueSuffix: debug
+  exchanges:
+    main: true
+    secondary: false
+  queues:
+    main: true
+    secondary: false
 
 virtualHosts:
   - name: sales

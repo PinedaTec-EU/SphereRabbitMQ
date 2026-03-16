@@ -8,6 +8,12 @@ broker:
 debugQueues:
   enabled: true
   queueSuffix: debug
+  exchanges:
+    main: true
+    secondary: false
+  queues:
+    main: true
+    secondary: false
 
 metadata:
   owner: platform

@@ -1,0 +1,44 @@
+broker:
+  managementUrl: http://localhost:31672/api/
+  username: admin
+  password: qwerty12345
+  virtualHosts:
+    - sales
+
+metadata:
+  owner: platform
+  service: ordering
+  scenario: decommission-exchange-and-queue
+
+virtualHosts:
+  - name: sales
+    exchanges:
+      - name: orders.current
+        type: topic
+        durable: true
+    queues:
+      - name: orders.created.current
+        type: quorum
+        durable: true
+    bindings:
+      - sourceExchange: orders.current
+        destination: orders.created.current
+        destinationType: queue
+        routingKey: "orders.created"
+
+decommission:
+  virtualHosts:
+    - name: sales
+      exchanges:
+        - orders.legacy
+      queues:
+        - orders.created.legacy
+      bindings:
+        - sourceExchange: orders.legacy
+          destination: orders.created.legacy
+          destinationType: queue
+          routingKey: "orders.created.legacy"
+        - sourceExchange: orders.current
+          destination: orders.created.legacy
+          destinationType: queue
+          routingKey: "orders.created.legacy"
