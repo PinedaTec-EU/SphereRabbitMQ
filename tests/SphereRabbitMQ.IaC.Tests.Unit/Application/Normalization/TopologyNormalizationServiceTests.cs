@@ -263,4 +263,79 @@ public sealed class TopologyNormalizationServiceTests
 
         Assert.Equal(120000L, deadLetterQueue.Arguments["x-message-ttl"]);
     }
+
+    [Fact]
+    public async Task NormalizeAsync_UsesDefaultExchange_WhenDeadLetterTargetsExistingQueue()
+    {
+        ITopologyNormalizer topologyNormalizer = new TopologyNormalizationService();
+        var topologyDocument = new TopologyDocument
+        {
+            VirtualHosts =
+            [
+                new VirtualHostDocument
+                {
+                    Name = "sales",
+                    Queues =
+                    [
+                        new QueueDocument
+                        {
+                            Name = "orders.delay",
+                            DeadLetter = new DeadLetterDocument
+                            {
+                                Enabled = true,
+                                DestinationType = "queue",
+                                QueueName = "orders.consume",
+                                Ttl = "00:05:00",
+                            },
+                        },
+                        new QueueDocument
+                        {
+                            Name = "orders.consume",
+                        },
+                    ],
+                },
+            ],
+        };
+
+        var topologyDefinition = await topologyNormalizer.NormalizeAsync(topologyDocument);
+        var virtualHost = topologyDefinition.VirtualHosts.Single();
+        var delayQueue = virtualHost.Queues.Single(queue => queue.Name == "orders.delay");
+
+        Assert.Equal(string.Empty, delayQueue.Arguments["x-dead-letter-exchange"]);
+        Assert.Equal("orders.consume", delayQueue.Arguments["x-dead-letter-routing-key"]);
+        Assert.DoesNotContain(virtualHost.Exchanges, exchange => exchange.Name == "orders.delay.dlx");
+        Assert.DoesNotContain(virtualHost.Queues, queue => queue.Name == "orders.consume.dlq");
+    }
+
+    [Fact]
+    public async Task NormalizeAsync_Throws_WhenDeadLetterQueueTargetOmitsQueueName()
+    {
+        ITopologyNormalizer topologyNormalizer = new TopologyNormalizationService();
+        var topologyDocument = new TopologyDocument
+        {
+            VirtualHosts =
+            [
+                new VirtualHostDocument
+                {
+                    Name = "sales",
+                    Queues =
+                    [
+                        new QueueDocument
+                        {
+                            Name = "orders.delay",
+                            DeadLetter = new DeadLetterDocument
+                            {
+                                Enabled = true,
+                                DestinationType = "queue",
+                            },
+                        },
+                    ],
+                },
+            ],
+        };
+
+        var exception = await Assert.ThrowsAsync<TopologyNormalizationException>(() => topologyNormalizer.NormalizeAsync(topologyDocument).AsTask());
+
+        Assert.Contains(exception.Issues, issue => issue.Code == "dead-letter-queue-target-required");
+    }
 }

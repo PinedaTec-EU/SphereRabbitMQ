@@ -98,6 +98,7 @@ public static class YamlTopologyDocumentMapper
                 : new DeadLetterDocument
                 {
                     Enabled = yamlDocument.DeadLetter.Enabled,
+                    DestinationType = yamlDocument.DeadLetter.DestinationType,
                     ExchangeName = yamlDocument.DeadLetter.ExchangeName,
                     QueueName = yamlDocument.DeadLetter.QueueName,
                     RoutingKey = yamlDocument.DeadLetter.RoutingKey,

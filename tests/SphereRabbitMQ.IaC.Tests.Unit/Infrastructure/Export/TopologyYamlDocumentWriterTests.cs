@@ -87,6 +87,7 @@ public sealed class TopologyYamlDocumentWriterTests
                             DeadLetter = new DeadLetterDocument
                             {
                                 Enabled = true,
+                                DestinationType = "generated",
                                 ExchangeName = "orders.dlx",
                                 QueueName = "orders.created.dlq",
                                 RoutingKey = "orders.created.dead",
@@ -151,6 +152,7 @@ public sealed class TopologyYamlDocumentWriterTests
         Assert.Contains("type: topic", yaml, StringComparison.Ordinal);
         Assert.Contains("queues:", yaml, StringComparison.Ordinal);
         Assert.Contains("deadLetter:", yaml, StringComparison.Ordinal);
+        Assert.Contains("destinationType: generated", yaml, StringComparison.Ordinal);
         Assert.Contains("exchangeName: orders.dlx", yaml, StringComparison.Ordinal);
         Assert.Contains("ttl: 00:05:00", yaml, StringComparison.Ordinal);
         Assert.Contains("retry:", yaml, StringComparison.Ordinal);
@@ -210,5 +212,43 @@ public sealed class TopologyYamlDocumentWriterTests
         ITopologyDocumentWriter writer = new TopologyYamlDocumentWriter();
 
         await Assert.ThrowsAsync<ArgumentNullException>(() => writer.WriteAsync(null!, CancellationToken.None).AsTask());
+    }
+
+    [Fact]
+    public async Task WriteAsync_SerializesDeadLetterQueueDestination()
+    {
+        ITopologyDocumentWriter writer = new TopologyYamlDocumentWriter();
+        var document = new TopologyDocument
+        {
+            VirtualHosts =
+            [
+                new VirtualHostDocument
+                {
+                    Name = "sales",
+                    Queues =
+                    [
+                        new QueueDocument
+                        {
+                            Name = "orders.delay",
+                            DeadLetter = new DeadLetterDocument
+                            {
+                                Enabled = true,
+                                DestinationType = "queue",
+                                QueueName = "orders.consume",
+                            },
+                        },
+                        new QueueDocument
+                        {
+                            Name = "orders.consume",
+                        },
+                    ],
+                },
+            ],
+        };
+
+        var yaml = await writer.WriteAsync(document, CancellationToken.None);
+
+        Assert.Contains("destinationType: queue", yaml, StringComparison.Ordinal);
+        Assert.Contains("queueName: orders.consume", yaml, StringComparison.Ordinal);
     }
 }

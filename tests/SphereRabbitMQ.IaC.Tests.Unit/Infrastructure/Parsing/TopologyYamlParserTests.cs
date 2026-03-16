@@ -163,4 +163,36 @@ public sealed class TopologyYamlParserTests
     Assert.Equal("queue", binding.DestinationType);
     Assert.Equal("orders.legacy", binding.RoutingKey);
   }
+
+  [Fact]
+  public async Task ParseAsync_MapsDeadLetterQueueDestination()
+  {
+    var variableResolverMock = new Mock<IVariableResolver>(MockBehavior.Strict);
+    variableResolverMock
+      .Setup(resolver => resolver.Resolve(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string?>>(), true))
+      .Returns<string, IReadOnlyDictionary<string, string?>, bool>((value, variables, _) =>
+        variables.Aggregate(value, (current, variable) => current.Replace($"${{{variable.Key}}}", variable.Value ?? string.Empty, StringComparison.Ordinal)));
+
+    ITopologyParser topologyParser = new TopologyYamlParser(variableResolverMock.Object);
+    var yaml = """
+        virtualHosts:
+          - name: sales
+            queues:
+              - name: orders.delay
+                deadLetter:
+                  destinationType: queue
+                  queueName: orders.consume
+                  ttl: "00:05:00"
+              - name: orders.consume
+        """;
+
+    await using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(yaml));
+    var topologyDocument = await topologyParser.ParseAsync(stream);
+
+    var deadLetter = topologyDocument.VirtualHosts.Single().Queues.Single(queue => queue.Name == "orders.delay").DeadLetter;
+    Assert.NotNull(deadLetter);
+    Assert.Equal("queue", deadLetter!.DestinationType);
+    Assert.Equal("orders.consume", deadLetter.QueueName);
+    Assert.Equal("00:05:00", deadLetter.Ttl);
+  }
 }

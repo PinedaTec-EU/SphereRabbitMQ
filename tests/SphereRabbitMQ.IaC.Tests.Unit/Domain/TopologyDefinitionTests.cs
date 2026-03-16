@@ -116,6 +116,54 @@ public sealed class TopologyDefinitionTests
     }
 
     [Fact]
+    public void Validate_ReturnsError_WhenDeadLetterTargetsMissingQueue()
+    {
+        var topology = new TopologyDefinition(
+        [
+            new VirtualHostDefinition(
+                "sales",
+                queues:
+                [
+                    new QueueDefinition(
+                        "orders.delay",
+                        deadLetter: new DeadLetterDefinition(
+                            enabled: true,
+                            destinationType: DeadLetterDestinationType.Queue,
+                            queueName: "orders.consume")),
+                ]),
+        ]);
+
+        var result = topology.Validate();
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Issues, issue => issue.Code == "missing-dead-letter-target-queue");
+    }
+
+    [Fact]
+    public void Validate_ReturnsValid_WhenDeadLetterTargetsExistingQueue()
+    {
+        var topology = new TopologyDefinition(
+        [
+            new VirtualHostDefinition(
+                "sales",
+                queues:
+                [
+                    new QueueDefinition(
+                        "orders.delay",
+                        deadLetter: new DeadLetterDefinition(
+                            enabled: true,
+                            destinationType: DeadLetterDestinationType.Queue,
+                            queueName: "orders.consume")),
+                    new QueueDefinition("orders.consume"),
+                ]),
+        ]);
+
+        var result = topology.Validate();
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
     public void Validate_ReturnsError_WhenDecommissionConflictsWithDesiredResources()
     {
         var topology = new TopologyDefinition(

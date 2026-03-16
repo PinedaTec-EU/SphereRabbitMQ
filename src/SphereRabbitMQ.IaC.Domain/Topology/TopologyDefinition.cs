@@ -103,6 +103,7 @@ public sealed record TopologyDefinition
         foreach (var queue in virtualHost.Queues)
         {
             ValidateQueue(virtualHost.Name, queue, namingPolicy, generatedNames, issues);
+            ValidateDeadLetterQueueTarget(virtualHost.Name, queue, queues, issues);
         }
 
         foreach (var binding in virtualHost.Bindings)
@@ -197,8 +198,44 @@ public sealed record TopologyDefinition
             return;
         }
 
+        if (queue.DeadLetter.DestinationType == DeadLetterDestinationType.Queue)
+        {
+            return;
+        }
+
         RegisterGeneratedName(queue.DeadLetter.ExchangeName ?? namingPolicy.GetDeadLetterExchangeName(queue.Name), path, generatedNames, issues);
         RegisterGeneratedName(queue.DeadLetter.QueueName ?? namingPolicy.GetDeadLetterQueueName(queue.Name), path, generatedNames, issues);
+    }
+
+    private static void ValidateDeadLetterQueueTarget(
+        string virtualHostName,
+        QueueDefinition queue,
+        IReadOnlyDictionary<string, QueueDefinition> queues,
+        ICollection<TopologyIssue> issues)
+    {
+        if (queue.DeadLetter is not { Enabled: true, DestinationType: DeadLetterDestinationType.Queue } deadLetter)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(deadLetter.QueueName))
+        {
+            issues.Add(new TopologyIssue(
+                "dead-letter-queue-target-required",
+                "Dead-letter destination type 'queue' requires queueName to be declared.",
+                $"/virtualHosts/{virtualHostName}/queues/{queue.Name}/deadLetter/queueName",
+                TopologyIssueSeverity.Error));
+            return;
+        }
+
+        if (!queues.ContainsKey(deadLetter.QueueName))
+        {
+            issues.Add(new TopologyIssue(
+                "missing-dead-letter-target-queue",
+                $"Dead-letter target queue '{deadLetter.QueueName}' does not exist.",
+                $"/virtualHosts/{virtualHostName}/queues/{queue.Name}/deadLetter/queueName",
+                TopologyIssueSeverity.Error));
+        }
     }
 
     private static void ValidateRetryConfiguration(

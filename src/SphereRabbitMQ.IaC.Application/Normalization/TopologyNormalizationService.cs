@@ -181,7 +181,8 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
         ICollection<QueueDefinition> queues,
         ICollection<BindingDefinition> bindings)
     {
-        if (queue.DeadLetter is { Enabled: true } deadLetter && queue.Retry is not { Enabled: true })
+        if (queue.DeadLetter is { Enabled: true, DestinationType: DeadLetterDestinationType.Generated } deadLetter &&
+            queue.Retry is not { Enabled: true })
         {
             AppendDeadLetterArtifacts(queue, deadLetter, namingPolicy, exchanges, queues, bindings);
         }
@@ -190,7 +191,7 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
         {
             AppendRetryArtifacts(queue, retry, namingPolicy, exchanges, queues, bindings);
 
-            if (queue.DeadLetter is { Enabled: true } retryDeadLetter)
+            if (queue.DeadLetter is { Enabled: true, DestinationType: DeadLetterDestinationType.Generated } retryDeadLetter)
             {
                 AppendDeadLetterArtifacts(queue, retryDeadLetter, namingPolicy, exchanges, queues, bindings);
             }
@@ -381,8 +382,12 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
 
         if (deadLetter is { Enabled: true })
         {
-            var deadLetterExchangeName = deadLetter.ExchangeName ?? namingPolicy.GetDeadLetterExchangeName(queueName);
-            var deadLetterRoutingKey = deadLetter.RoutingKey ?? queueName;
+            var deadLetterExchangeName = deadLetter.DestinationType == DeadLetterDestinationType.Queue
+                ? TopologyNormalizationConsts.EmptyExchangeName
+                : deadLetter.ExchangeName ?? namingPolicy.GetDeadLetterExchangeName(queueName);
+            var deadLetterRoutingKey = deadLetter.DestinationType == DeadLetterDestinationType.Queue
+                ? deadLetter.RoutingKey ?? deadLetter.QueueName ?? queueName
+                : deadLetter.RoutingKey ?? queueName;
             SetArgument(arguments, TopologyNormalizationConsts.DeadLetterExchangeArgument, deadLetterExchangeName, queueName, issues);
             SetArgument(arguments, TopologyNormalizationConsts.DeadLetterRoutingKeyArgument, deadLetterRoutingKey, queueName, issues);
         }
@@ -484,7 +489,31 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
         }
 
         var ttl = NormalizeDeadLetterTtl(virtualHostName, queueName, document.Ttl, issues);
-        return new DeadLetterDefinition(document.Enabled, document.ExchangeName, document.QueueName, document.RoutingKey, ttl);
+        var path = $"/virtualHosts/{virtualHostName}/queues/{queueName}/deadLetter";
+        var destinationType = ParseDeadLetterDestinationType(document.DestinationType, path, issues);
+
+        if (destinationType == DeadLetterDestinationType.Queue)
+        {
+            if (string.IsNullOrWhiteSpace(document.QueueName))
+            {
+                issues.Add(new TopologyIssue(
+                    "dead-letter-queue-target-required",
+                    "Dead-letter destination type 'queue' requires queueName to be declared.",
+                    $"{path}/queueName",
+                    TopologyIssueSeverity.Error));
+            }
+
+            if (!string.IsNullOrWhiteSpace(document.ExchangeName))
+            {
+                issues.Add(new TopologyIssue(
+                    "dead-letter-queue-target-does-not-use-exchange",
+                    "Dead-letter destination type 'queue' cannot declare exchangeName. RabbitMQ routing uses the default exchange for queue targets.",
+                    $"{path}/exchangeName",
+                    TopologyIssueSeverity.Error));
+            }
+        }
+
+        return new DeadLetterDefinition(document.Enabled, destinationType, document.ExchangeName, document.QueueName, document.RoutingKey, ttl);
     }
 
     private static RetryDefinition? NormalizeRetry(
@@ -555,6 +584,22 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
                 $"Binding destination type '{value}' is not supported.",
                 issues,
                 BindingDestinationType.Queue),
+        };
+
+    private static DeadLetterDestinationType ParseDeadLetterDestinationType(
+        string value,
+        string path,
+        ICollection<TopologyIssue> issues)
+        => value.Trim().ToLowerInvariant() switch
+        {
+            "generated" => DeadLetterDestinationType.Generated,
+            "queue" => DeadLetterDestinationType.Queue,
+            _ => AddInvalidEnumIssue(
+                path,
+                "invalid-dead-letter-destination-type",
+                $"Dead-letter destination type '{value}' is not supported.",
+                issues,
+                DeadLetterDestinationType.Generated),
         };
 
     private static T AddInvalidEnumIssue<T>(

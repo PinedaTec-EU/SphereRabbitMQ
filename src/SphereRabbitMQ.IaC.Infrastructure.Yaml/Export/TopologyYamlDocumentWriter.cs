@@ -112,6 +112,7 @@ public sealed class TopologyYamlDocumentWriter : ITopologyDocumentWriter
                 : new DeadLetterYamlDocument
                 {
                     Enabled = document.DeadLetter.Enabled,
+                    DestinationType = document.DeadLetter.DestinationType,
                     ExchangeName = document.DeadLetter.ExchangeName,
                     QueueName = document.DeadLetter.QueueName,
                     RoutingKey = document.DeadLetter.RoutingKey,

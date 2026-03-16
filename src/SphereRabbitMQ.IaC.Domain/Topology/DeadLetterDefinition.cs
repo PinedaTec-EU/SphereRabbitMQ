@@ -12,12 +12,14 @@ public sealed record DeadLetterDefinition
 {
     public DeadLetterDefinition(
         bool enabled = true,
+        DeadLetterDestinationType destinationType = DeadLetterDestinationType.Generated,
         string? exchangeName = null,
         string? queueName = null,
         string? routingKey = null,
         TimeSpan? ttl = null)
     {
         Enabled = enabled;
+        DestinationType = destinationType;
         ExchangeName = NormalizeOptional(exchangeName);
         QueueName = NormalizeOptional(queueName);
         RoutingKey = NormalizeOptional(routingKey);
@@ -30,6 +32,8 @@ public sealed record DeadLetterDefinition
     }
 
     public bool Enabled { get; }
+
+    public DeadLetterDestinationType DestinationType { get; }
 
     public string? ExchangeName { get; }
 

@@ -10,6 +10,8 @@ public sealed record DeadLetterYamlDocument
 {
     public bool Enabled { get; init; } = true;
 
+    public string DestinationType { get; init; } = "generated";
+
     public string? ExchangeName { get; init; }
 
     public string? QueueName { get; init; }
