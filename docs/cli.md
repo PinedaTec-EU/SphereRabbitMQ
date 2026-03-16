@@ -366,25 +366,29 @@ naming:
 
 ### Debug queue generation
 
-The optional `debugQueues` block can generate debug queues by exchange and/or by queue in each managed virtual host.
+The optional `debugQueues` block enables debug queue generation. Each exchange or queue opts in with its own `debugQueue` flag.
 
 ```yaml
 debugQueues:
   enabled: true
   queueSuffix: debug
-  exchanges:
-    main: true
-    secondary: false
-  queues:
-    main: true
-    secondary: false
+virtualHosts:
+  - name: sales
+    exchanges:
+      - name: orders
+        debugQueue: true
+    queues:
+      - name: orders.created
+        debugQueue: true
 ```
 
-Selection rules:
+Rules:
 
-- `main`: artifacts declared directly in YAML (`virtualHosts[].exchanges[]` and `virtualHosts[].queues[]`).
-- `secondary`: generated artifacts (retry and dead-letter exchanges/queues), including explicitly declared artifacts whose names belong to the same retry/dead-letter naming flow.
-- defaults are `exchanges.main: true`, `exchanges.secondary: false`, `queues.main: false`, `queues.secondary: false`.
+- `debugQueues.enabled` must be `true` to generate any debug queues.
+- `debugQueues.queueSuffix` defaults to `debug`.
+- `virtualHosts[].exchanges[].debugQueue: true` generates a debug queue bound to that exchange.
+- `virtualHosts[].queues[].debugQueue: true` generates a debug queue that mirrors the queue incoming bindings.
+- Generated retry/dead-letter artifacts are not selected automatically. If you declare one explicitly and want a debug queue for it, set its own `debugQueue: true`.
 
 Debug queue conventions are deterministic:
 
