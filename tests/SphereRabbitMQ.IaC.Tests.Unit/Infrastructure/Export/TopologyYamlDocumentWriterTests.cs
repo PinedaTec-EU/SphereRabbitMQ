@@ -30,6 +30,11 @@ public sealed class TopologyYamlDocumentWriterTests
                     },
                 ],
             },
+            DebugQueues = new DebugQueuesDocument
+            {
+                Enabled = true,
+                QueueSuffix = "dbg",
+            },
             Metadata = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["team"] = "sales",
@@ -59,6 +64,7 @@ public sealed class TopologyYamlDocumentWriterTests
                             Name = "orders",
                             Type = "topic",
                             Durable = true,
+                            DebugQueue = true,
                             Arguments = new Dictionary<string, object?>(StringComparer.Ordinal)
                             {
                                 ["alternate-exchange"] = "orders.unrouted",
@@ -76,6 +82,7 @@ public sealed class TopologyYamlDocumentWriterTests
                             Name = "orders.created",
                             Type = "quorum",
                             Durable = true,
+                            DebugQueue = true,
                             Arguments = new Dictionary<string, object?>(StringComparer.Ordinal)
                             {
                                 ["x-message-ttl"] = 30000,
@@ -143,12 +150,15 @@ public sealed class TopologyYamlDocumentWriterTests
         Assert.Contains("team: sales", yaml, StringComparison.Ordinal);
         Assert.Contains("decommission:", yaml, StringComparison.Ordinal);
         Assert.Contains("orders.legacy", yaml, StringComparison.Ordinal);
+        Assert.Contains("debugQueues:", yaml, StringComparison.Ordinal);
+        Assert.Contains("queueSuffix: dbg", yaml, StringComparison.Ordinal);
         Assert.Contains("naming:", yaml, StringComparison.Ordinal);
         Assert.Contains("retryExchangeSuffix: retry", yaml, StringComparison.Ordinal);
         Assert.Contains("deadLetterExchangeSuffix: dlx", yaml, StringComparison.Ordinal);
         Assert.Contains("virtualHosts:", yaml, StringComparison.Ordinal);
         Assert.Contains("- name: sales", yaml, StringComparison.Ordinal);
         Assert.Contains("exchanges:", yaml, StringComparison.Ordinal);
+        Assert.Contains("debugQueue: true", yaml, StringComparison.Ordinal);
         Assert.Contains("type: topic", yaml, StringComparison.Ordinal);
         Assert.Contains("queues:", yaml, StringComparison.Ordinal);
         Assert.Contains("deadLetter:", yaml, StringComparison.Ordinal);

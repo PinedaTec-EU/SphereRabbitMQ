@@ -24,8 +24,8 @@ public sealed class TopologyNormalizationServiceTests
                     Name = "z-vhost",
                     Exchanges =
                     [
-                        new ExchangeDocument { Name = "events", Type = "topic" },
-                        new ExchangeDocument { Name = "audit", Type = "fanout" },
+                        new ExchangeDocument { Name = "events", Type = "topic", DebugQueue = true },
+                        new ExchangeDocument { Name = "audit", Type = "fanout", DebugQueue = true },
                     ],
                     Queues =
                     [
@@ -317,16 +317,6 @@ public sealed class TopologyNormalizationServiceTests
             DebugQueues = new DebugQueuesDocument
             {
                 Enabled = true,
-                Exchanges = new DebugQueueScopeDocument
-                {
-                    Main = true,
-                    Secondary = false,
-                },
-                Queues = new DebugQueueScopeDocument
-                {
-                    Main = true,
-                    Secondary = false,
-                },
             },
             VirtualHosts =
             [
@@ -335,12 +325,12 @@ public sealed class TopologyNormalizationServiceTests
                     Name = "sales",
                     Exchanges =
                     [
-                        new ExchangeDocument { Name = "orders", Type = "topic" },
+                        new ExchangeDocument { Name = "orders", Type = "topic", DebugQueue = true },
                         new ExchangeDocument { Name = "payments", Type = "topic" },
                     ],
                     Queues =
                     [
-                        new QueueDocument { Name = "orders.created", Type = "classic" },
+                        new QueueDocument { Name = "orders.created", Type = "classic", DebugQueue = true },
                         new QueueDocument { Name = "payments.created", Type = "classic" },
                     ],
                     Bindings =
@@ -368,9 +358,9 @@ public sealed class TopologyNormalizationServiceTests
         var virtualHost = topologyDefinition.VirtualHosts.Single();
 
         Assert.Contains(virtualHost.Queues, queue => queue.Name == "orders.debug");
-        Assert.Contains(virtualHost.Queues, queue => queue.Name == "payments.debug");
+        Assert.DoesNotContain(virtualHost.Queues, queue => queue.Name == "payments.debug");
         Assert.Contains(virtualHost.Queues, queue => queue.Name == "orders.created.debug");
-        Assert.Contains(virtualHost.Queues, queue => queue.Name == "payments.created.debug");
+        Assert.DoesNotContain(virtualHost.Queues, queue => queue.Name == "payments.created.debug");
 
         Assert.Contains(virtualHost.Bindings, binding =>
             binding.SourceExchange == "orders" &&
@@ -382,14 +372,56 @@ public sealed class TopologyNormalizationServiceTests
             binding.Destination == "orders.created.debug" &&
             binding.RoutingKey == "orders.created");
 
-        Assert.Contains(virtualHost.Bindings, binding =>
-            binding.SourceExchange == "payments" &&
-            binding.Destination == "payments.created.debug" &&
-            binding.RoutingKey == "payments.created");
+        Assert.DoesNotContain(virtualHost.Bindings, binding => binding.Destination == "payments.created.debug");
     }
 
     [Fact]
-    public async Task NormalizeAsync_TreatsDeclaredDeadLetterFlowArtifactsAsSecondary_ForDebugScopeSelection()
+    public async Task NormalizeAsync_DoesNotGenerateDebugArtifacts_WhenDebugQueuesAreDisabled()
+    {
+        ITopologyNormalizer topologyNormalizer = new TopologyNormalizationService();
+        var topologyDocument = new TopologyDocument
+        {
+            DebugQueues = new DebugQueuesDocument
+            {
+                Enabled = false,
+            },
+            VirtualHosts =
+            [
+                new VirtualHostDocument
+                {
+                    Name = "sales",
+                    Exchanges =
+                    [
+                        new ExchangeDocument { Name = "orders", Type = "topic", DebugQueue = true },
+                    ],
+                    Queues =
+                    [
+                        new QueueDocument { Name = "orders.created", Type = "classic", DebugQueue = true },
+                    ],
+                    Bindings =
+                    [
+                        new BindingDocument
+                        {
+                            SourceExchange = "orders",
+                            Destination = "orders.created",
+                            DestinationType = "queue",
+                            RoutingKey = "orders.created",
+                        },
+                    ],
+                },
+            ],
+        };
+
+        var topologyDefinition = await topologyNormalizer.NormalizeAsync(topologyDocument);
+        var virtualHost = topologyDefinition.VirtualHosts.Single();
+
+        Assert.DoesNotContain(virtualHost.Queues, queue => queue.Name == "orders.debug");
+        Assert.DoesNotContain(virtualHost.Queues, queue => queue.Name == "orders.created.debug");
+        Assert.DoesNotContain(virtualHost.Bindings, binding => binding.Destination.EndsWith(".debug", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task NormalizeAsync_CreatesDebugQueuesForExplicitlyFlaggedSecondaryNamedArtifacts()
     {
         ITopologyNormalizer topologyNormalizer = new TopologyNormalizationService();
         var topologyDocument = new TopologyDocument
@@ -397,16 +429,6 @@ public sealed class TopologyNormalizationServiceTests
             DebugQueues = new DebugQueuesDocument
             {
                 Enabled = true,
-                Exchanges = new DebugQueueScopeDocument
-                {
-                    Main = true,
-                    Secondary = false,
-                },
-                Queues = new DebugQueueScopeDocument
-                {
-                    Main = true,
-                    Secondary = false,
-                },
             },
             VirtualHosts =
             [
@@ -416,7 +438,7 @@ public sealed class TopologyNormalizationServiceTests
                     Exchanges =
                     [
                         new ExchangeDocument { Name = "orders", Type = "topic" },
-                        new ExchangeDocument { Name = "orders.dlx", Type = "direct" },
+                        new ExchangeDocument { Name = "orders.dlx", Type = "direct", DebugQueue = true },
                     ],
                     Queues =
                     [
@@ -428,7 +450,7 @@ public sealed class TopologyNormalizationServiceTests
                                 Enabled = true,
                             },
                         },
-                        new QueueDocument { Name = "orders.dlq" },
+                        new QueueDocument { Name = "orders.dlq", DebugQueue = true },
                     ],
                     Bindings =
                     [
@@ -454,9 +476,188 @@ public sealed class TopologyNormalizationServiceTests
         var topologyDefinition = await topologyNormalizer.NormalizeAsync(topologyDocument);
         var virtualHost = topologyDefinition.VirtualHosts.Single();
 
-        Assert.Contains(virtualHost.Queues, queue => queue.Name == "orders.debug");
-        Assert.DoesNotContain(virtualHost.Queues, queue => queue.Name == "orders.dlx.debug");
-        Assert.DoesNotContain(virtualHost.Queues, queue => queue.Name == "orders.dlq.debug");
+        Assert.DoesNotContain(virtualHost.Queues, queue => queue.Name == "orders.debug");
+        Assert.Contains(virtualHost.Queues, queue => queue.Name == "orders.dlx.debug");
+        Assert.Contains(virtualHost.Queues, queue => queue.Name == "orders.dlq.debug");
+    }
+
+    [Fact]
+    public async Task NormalizeAsync_DoesNotCreateDebugQueues_ForSecondaryNamedArtifactsWithoutFlag()
+    {
+        ITopologyNormalizer topologyNormalizer = new TopologyNormalizationService();
+        var topologyDocument = new TopologyDocument
+        {
+            DebugQueues = new DebugQueuesDocument
+            {
+                Enabled = true,
+            },
+            VirtualHosts =
+            [
+                new VirtualHostDocument
+                {
+                    Name = "sales",
+                    Exchanges =
+                    [
+                        new ExchangeDocument { Name = "suite.events", Type = "topic", DebugQueue = true },
+                        new ExchangeDocument { Name = "campaigns.events.dlx", Type = "direct" },
+                    ],
+                    Queues =
+                    [
+                        new QueueDocument { Name = "campaigns.events", Type = "quorum", DebugQueue = true },
+                        new QueueDocument { Name = "campaigns.events.dlq" },
+                    ],
+                    Bindings =
+                    [
+                        new BindingDocument
+                        {
+                            SourceExchange = "suite.events",
+                            Destination = "campaigns.events",
+                            DestinationType = "queue",
+                            RoutingKey = "campaigns.events",
+                        },
+                        new BindingDocument
+                        {
+                            SourceExchange = "campaigns.events.dlx",
+                            Destination = "campaigns.events.dlq",
+                            DestinationType = "queue",
+                            RoutingKey = "campaigns.events",
+                        },
+                    ],
+                },
+            ],
+        };
+
+        var topologyDefinition = await topologyNormalizer.NormalizeAsync(topologyDocument);
+        var virtualHost = topologyDefinition.VirtualHosts.Single();
+
+        Assert.Contains(virtualHost.Queues, queue => queue.Name == "suite.events.debug");
+        Assert.Contains(virtualHost.Queues, queue => queue.Name == "campaigns.events.debug");
+        Assert.DoesNotContain(virtualHost.Queues, queue => queue.Name == "campaigns.events.dlx.debug");
+        Assert.DoesNotContain(virtualHost.Queues, queue => queue.Name == "campaigns.events.dlq.debug");
+        Assert.Contains(virtualHost.Bindings, binding =>
+            binding.SourceExchange == "suite.events" &&
+            binding.Destination == "campaigns.events.debug" &&
+            binding.RoutingKey == "campaigns.events");
+    }
+
+    [Fact]
+    public async Task NormalizeAsync_CreatesDebugQueuesOnlyForFlaggedArtifacts_WhenMainArtifactsAreNotFlagged()
+    {
+        ITopologyNormalizer topologyNormalizer = new TopologyNormalizationService();
+        var topologyDocument = new TopologyDocument
+        {
+            DebugQueues = new DebugQueuesDocument
+            {
+                Enabled = true,
+            },
+            VirtualHosts =
+            [
+                new VirtualHostDocument
+                {
+                    Name = "sales",
+                    Exchanges =
+                    [
+                        new ExchangeDocument { Name = "suite.events", Type = "topic" },
+                        new ExchangeDocument { Name = "campaigns.events.dlx", Type = "direct", DebugQueue = true },
+                    ],
+                    Queues =
+                    [
+                        new QueueDocument { Name = "campaigns.events", Type = "quorum" },
+                        new QueueDocument { Name = "campaigns.events.dlq", DebugQueue = true },
+                    ],
+                    Bindings =
+                    [
+                        new BindingDocument
+                        {
+                            SourceExchange = "suite.events",
+                            Destination = "campaigns.events",
+                            DestinationType = "queue",
+                            RoutingKey = "campaigns.events",
+                        },
+                        new BindingDocument
+                        {
+                            SourceExchange = "campaigns.events.dlx",
+                            Destination = "campaigns.events.dlq",
+                            DestinationType = "queue",
+                            RoutingKey = "campaigns.events",
+                        },
+                    ],
+                },
+            ],
+        };
+
+        var topologyDefinition = await topologyNormalizer.NormalizeAsync(topologyDocument);
+        var virtualHost = topologyDefinition.VirtualHosts.Single();
+
+        Assert.DoesNotContain(virtualHost.Queues, queue => queue.Name == "suite.events.debug");
+        Assert.DoesNotContain(virtualHost.Queues, queue => queue.Name == "campaigns.events.debug");
+        Assert.Contains(virtualHost.Queues, queue => queue.Name == "campaigns.events.dlx.debug");
+        Assert.Contains(virtualHost.Queues, queue => queue.Name == "campaigns.events.dlq.debug");
+        Assert.Contains(virtualHost.Bindings, binding =>
+            binding.SourceExchange == "campaigns.events.dlx" &&
+            binding.Destination == "campaigns.events.dlq.debug" &&
+            binding.RoutingKey == "campaigns.events");
+    }
+
+    [Fact]
+    public async Task NormalizeAsync_IgnoresSecondaryNamingConvention_WhenArtifactsAreNotFlagged()
+    {
+        ITopologyNormalizer topologyNormalizer = new TopologyNormalizationService();
+        var topologyDocument = new TopologyDocument
+        {
+            Naming = new NamingConventionDocument
+            {
+                Separator = "-",
+                DeadLetterExchangeSuffix = "dead",
+                DeadLetterQueueSuffix = "parking",
+            },
+            DebugQueues = new DebugQueuesDocument
+            {
+                Enabled = true,
+            },
+            VirtualHosts =
+            [
+                new VirtualHostDocument
+                {
+                    Name = "sales",
+                    Exchanges =
+                    [
+                        new ExchangeDocument { Name = "suite-events", Type = "topic", DebugQueue = true },
+                        new ExchangeDocument { Name = "campaigns-events-dead", Type = "direct" },
+                    ],
+                    Queues =
+                    [
+                        new QueueDocument { Name = "campaigns-events", Type = "quorum", DebugQueue = true },
+                        new QueueDocument { Name = "campaigns-events-parking" },
+                    ],
+                    Bindings =
+                    [
+                        new BindingDocument
+                        {
+                            SourceExchange = "suite-events",
+                            Destination = "campaigns-events",
+                            DestinationType = "queue",
+                            RoutingKey = "campaigns-events",
+                        },
+                        new BindingDocument
+                        {
+                            SourceExchange = "campaigns-events-dead",
+                            Destination = "campaigns-events-parking",
+                            DestinationType = "queue",
+                            RoutingKey = "campaigns-events",
+                        },
+                    ],
+                },
+            ],
+        };
+
+        var topologyDefinition = await topologyNormalizer.NormalizeAsync(topologyDocument);
+        var virtualHost = topologyDefinition.VirtualHosts.Single();
+
+        Assert.Contains(virtualHost.Queues, queue => queue.Name == "suite-events.debug");
+        Assert.Contains(virtualHost.Queues, queue => queue.Name == "campaigns-events.debug");
+        Assert.DoesNotContain(virtualHost.Queues, queue => queue.Name == "campaigns-events-dead.debug");
+        Assert.DoesNotContain(virtualHost.Queues, queue => queue.Name == "campaigns-events-parking.debug");
     }
 
     [Fact]

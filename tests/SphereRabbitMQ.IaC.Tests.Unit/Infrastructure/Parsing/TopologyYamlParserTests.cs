@@ -35,19 +35,15 @@ public sealed class TopologyYamlParserTests
         debugQueues:
           enabled: true
           queueSuffix: dbg
-          exchanges:
-            main: true
-            secondary: false
-          queues:
-            main: true
-            secondary: false
         virtualHosts:
           - name: ${VHOST_NAME}
             exchanges:
               - name: ${EXCHANGE_NAME}
+                debugQueue: true
             queues:
               - name: orders.debug.window
                 ttl: "00:05:00"
+                debugQueue: true
         """;
 
     await using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(yaml));
@@ -63,12 +59,10 @@ public sealed class TopologyYamlParserTests
     Assert.NotNull(topologyDocument.DebugQueues);
     Assert.True(topologyDocument.DebugQueues!.Enabled);
     Assert.Equal("dbg", topologyDocument.DebugQueues.QueueSuffix);
-    Assert.True(topologyDocument.DebugQueues.Exchanges.Main);
-    Assert.False(topologyDocument.DebugQueues.Exchanges.Secondary);
-    Assert.True(topologyDocument.DebugQueues.Queues.Main);
-    Assert.False(topologyDocument.DebugQueues.Queues.Secondary);
     Assert.Equal("topic", topologyDocument.VirtualHosts.Single().Exchanges.Single().Type);
+    Assert.True(topologyDocument.VirtualHosts.Single().Exchanges.Single().DebugQueue);
     Assert.Equal("00:05:00", topologyDocument.VirtualHosts.Single().Queues.Single().Ttl);
+    Assert.True(topologyDocument.VirtualHosts.Single().Queues.Single().DebugQueue);
     variableResolverMock.Verify(
         resolver => resolver.Resolve(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string?>>(), true),
         Times.AtLeastOnce);
