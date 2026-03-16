@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=./topology.schema.json
 broker:
   managementUrl: http://localhost:31672/api/
   username: admin

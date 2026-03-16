@@ -1,0 +1,584 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://pinedatec.eu/sphererabbitmq/topology.schema.json",
+    "title": "SphereRabbitMQ topology YAML",
+    "description": "Schema for RabbitMQ topology documents consumed by SphereRabbitMQ.IaC.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+        "virtualHosts"
+    ],
+    "properties": {
+        "broker": {
+            "$ref": "#/$defs/broker"
+        },
+        "metadata": {
+            "$ref": "#/$defs/stringMap",
+            "description": "Free-form metadata copied through normalization."
+        },
+        "variables": {
+            "$ref": "#/$defs/nullableStringMap",
+            "description": "Variable bag used for ${...} resolution in topology values."
+        },
+        "naming": {
+            "$ref": "#/$defs/naming"
+        },
+        "debugQueues": {
+            "$ref": "#/$defs/debugQueues"
+        },
+        "virtualHosts": {
+            "type": "array",
+            "items": {
+                "$ref": "#/$defs/virtualHost"
+            },
+            "minItems": 1
+        },
+        "decommission": {
+            "$ref": "#/$defs/decommission"
+        }
+    },
+    "$defs": {
+        "stringMap": {
+            "type": "object",
+            "additionalProperties": {
+                "type": "string"
+            }
+        },
+        "nullableStringMap": {
+            "type": "object",
+            "additionalProperties": {
+                "type": [
+                    "string",
+                    "null"
+                ]
+            }
+        },
+        "scalarValue": {
+            "anyOf": [
+                {
+                    "type": "string"
+                },
+                {
+                    "type": "number"
+                },
+                {
+                    "type": "integer"
+                },
+                {
+                    "type": "boolean"
+                },
+                {
+                    "type": "null"
+                }
+            ]
+        },
+        "yamlValue": {
+            "anyOf": [
+                {
+                    "$ref": "#/$defs/scalarValue"
+                },
+                {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/yamlValue"
+                    }
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/$defs/yamlValue"
+                    }
+                }
+            ]
+        },
+        "argumentMap": {
+            "type": "object",
+            "additionalProperties": {
+                "$ref": "#/$defs/yamlValue"
+            }
+        },
+        "broker": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "managementUrl": {
+                    "type": "string",
+                    "description": "RabbitMQ management API base URL, for example http://localhost:15672/api/."
+                },
+                "username": {
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string"
+                },
+                "virtualHosts": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "naming": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "separator": {
+                    "type": "string"
+                },
+                "retryExchangeSuffix": {
+                    "type": "string"
+                },
+                "retryQueueSuffix": {
+                    "type": "string"
+                },
+                "deadLetterExchangeSuffix": {
+                    "type": "string"
+                },
+                "deadLetterQueueSuffix": {
+                    "type": "string"
+                },
+                "stepTokenPrefix": {
+                    "type": "string"
+                }
+            }
+        },
+        "debugScope": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "main": {
+                    "type": "boolean"
+                },
+                "secondary": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "debugQueues": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "queueSuffix": {
+                    "type": "string",
+                    "default": "debug"
+                },
+                "exchanges": {
+                    "$ref": "#/$defs/debugScope"
+                },
+                "queues": {
+                    "$ref": "#/$defs/debugScope"
+                }
+            }
+        },
+        "exchange": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "direct",
+                        "topic",
+                        "fanout",
+                        "headers"
+                    ],
+                    "default": "topic"
+                },
+                "durable": {
+                    "type": "boolean",
+                    "default": true
+                },
+                "autoDelete": {
+                    "type": "boolean",
+                    "default": false
+                },
+                "internal": {
+                    "type": "boolean",
+                    "default": false
+                },
+                "arguments": {
+                    "$ref": "#/$defs/argumentMap"
+                },
+                "metadata": {
+                    "$ref": "#/$defs/stringMap"
+                }
+            }
+        },
+        "retryStep": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "delay"
+            ],
+            "properties": {
+                "delay": {
+                    "type": "string",
+                    "description": "Positive .NET TimeSpan, for example 00:00:30 or 00:05:00."
+                },
+                "name": {
+                    "type": "string"
+                },
+                "queueName": {
+                    "type": "string"
+                },
+                "routingKey": {
+                    "type": "string"
+                }
+            }
+        },
+        "retry": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "enabled": {
+                    "type": "boolean",
+                    "default": true
+                },
+                "autoGenerateArtifacts": {
+                    "type": "boolean",
+                    "default": true
+                },
+                "exchangeName": {
+                    "type": "string"
+                },
+                "steps": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/retryStep"
+                    }
+                }
+            },
+            "allOf": [
+                {
+                    "if": {
+                        "properties": {
+                            "enabled": {
+                                "const": true
+                            }
+                        },
+                        "required": [
+                            "enabled"
+                        ]
+                    },
+                    "then": {
+                        "required": [
+                            "steps"
+                        ],
+                        "properties": {
+                            "steps": {
+                                "minItems": 1
+                            }
+                        }
+                    }
+                }
+            ]
+        },
+        "deadLetter": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "enabled": {
+                    "type": "boolean",
+                    "default": true
+                },
+                "destinationType": {
+                    "type": "string",
+                    "enum": [
+                        "generated",
+                        "queue"
+                    ],
+                    "default": "generated"
+                },
+                "exchangeName": {
+                    "type": "string"
+                },
+                "queueName": {
+                    "type": "string"
+                },
+                "routingKey": {
+                    "type": "string"
+                },
+                "ttl": {
+                    "type": "string",
+                    "description": "Positive .NET TimeSpan."
+                }
+            },
+            "allOf": [
+                {
+                    "if": {
+                        "properties": {
+                            "enabled": {
+                                "const": true
+                            },
+                            "destinationType": {
+                                "const": "queue"
+                            }
+                        },
+                        "required": [
+                            "enabled",
+                            "destinationType"
+                        ]
+                    },
+                    "then": {
+                        "required": [
+                            "queueName"
+                        ],
+                        "not": {
+                            "required": [
+                                "exchangeName"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "destinationType": {
+                                "const": "generated"
+                            }
+                        },
+                        "required": [
+                            "destinationType"
+                        ]
+                    },
+                    "then": {
+                        "not": {
+                            "required": [
+                                "routingKey"
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "queue": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "classic",
+                        "quorum"
+                    ],
+                    "default": "classic"
+                },
+                "durable": {
+                    "type": "boolean",
+                    "default": true
+                },
+                "exclusive": {
+                    "type": "boolean",
+                    "default": false
+                },
+                "autoDelete": {
+                    "type": "boolean",
+                    "default": false
+                },
+                "ttl": {
+                    "type": "string",
+                    "description": "Positive .NET TimeSpan, for example 00:10:00."
+                },
+                "arguments": {
+                    "$ref": "#/$defs/argumentMap"
+                },
+                "deadLetter": {
+                    "$ref": "#/$defs/deadLetter"
+                },
+                "retry": {
+                    "$ref": "#/$defs/retry"
+                },
+                "metadata": {
+                    "$ref": "#/$defs/stringMap"
+                }
+            },
+            "allOf": [
+                {
+                    "if": {
+                        "properties": {
+                            "type": {
+                                "const": "quorum"
+                            }
+                        },
+                        "required": [
+                            "type"
+                        ]
+                    },
+                    "then": {
+                        "properties": {
+                            "exclusive": {
+                                "const": false
+                            },
+                            "autoDelete": {
+                                "const": false
+                            }
+                        }
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "retry": {
+                                "type": "object",
+                                "properties": {
+                                    "enabled": {
+                                        "const": true
+                                    }
+                                },
+                                "required": [
+                                    "enabled"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "retry"
+                        ]
+                    },
+                    "then": {
+                        "required": [
+                            "deadLetter"
+                        ],
+                        "properties": {
+                            "deadLetter": {
+                                "type": "object",
+                                "properties": {
+                                    "enabled": {
+                                        "const": true
+                                    }
+                                },
+                                "required": [
+                                    "enabled"
+                                ]
+                            }
+                        }
+                    }
+                }
+            ]
+        },
+        "binding": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "sourceExchange",
+                "destination"
+            ],
+            "properties": {
+                "sourceExchange": {
+                    "type": "string"
+                },
+                "destination": {
+                    "type": "string"
+                },
+                "destinationType": {
+                    "type": "string",
+                    "enum": [
+                        "queue",
+                        "exchange"
+                    ],
+                    "default": "queue"
+                },
+                "routingKey": {
+                    "type": "string",
+                    "default": ""
+                },
+                "arguments": {
+                    "$ref": "#/$defs/argumentMap"
+                },
+                "metadata": {
+                    "$ref": "#/$defs/stringMap"
+                }
+            }
+        },
+        "virtualHost": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "exchanges": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/exchange"
+                    }
+                },
+                "queues": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/queue"
+                    }
+                },
+                "bindings": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/binding"
+                    }
+                },
+                "metadata": {
+                    "$ref": "#/$defs/stringMap"
+                }
+            }
+        },
+        "decommissionVirtualHost": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "exchanges": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "queues": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "bindings": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/binding"
+                    }
+                }
+            }
+        },
+        "decommission": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "virtualHosts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/decommissionVirtualHost"
+                    }
+                }
+            }
+        }
+    }
+}

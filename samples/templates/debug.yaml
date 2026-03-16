@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=../topology.schema.json
 debugQueues:
   enabled: true
   queueSuffix: debug
