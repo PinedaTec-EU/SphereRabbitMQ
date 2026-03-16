@@ -1,4 +1,5 @@
 using SphereRabbitMQ.Domain.Messaging;
+using SphereRabbitMQ.Domain.Retry;
 
 namespace SphereRabbitMQ.Domain.Subscribers;
 
@@ -20,4 +21,6 @@ public sealed record SubscriberDefinition<TMessage> : SubscriberDefinition
     public Func<SubscriberDeadLetterNotification<TMessage>, CancellationToken, Task>? DeadLetterNotificationHandler { get; init; }
 
     public Func<SubscriberComponentFailureContext, CancellationToken, Task<SubscriberComponentFailureHandlingResult>>? ComponentFailureHandler { get; init; }
+
+    public Func<SubscriberRetryDelayContext<TMessage>, TimeSpan>? RetryDelayResolver { get; init; }
 }

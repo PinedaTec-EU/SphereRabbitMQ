@@ -9,6 +9,7 @@ using Moq;
 using SphereRabbitMQ.Abstractions.Configuration;
 using SphereRabbitMQ.Abstractions.Subscribers;
 using SphereRabbitMQ.Abstractions.Topology;
+using SphereRabbitMQ.Application.Retry;
 using SphereRabbitMQ.DependencyInjection;
 using SphereRabbitMQ.DependencyInjection.Subscribers;
 using SphereRabbitMQ.Domain.Subscribers;
@@ -108,6 +109,7 @@ public sealed class RabbitSubscriberRegistrationTests
         var definition = registrations[0].BuildDefinition(provider);
         Assert.Equal("orders.queue", definition.QueueName);
         Assert.Equal(SubscriberErrorStrategyKind.DeadLetterOnly, definition.ErrorHandling.Strategy);
+        Assert.NotNull(((SubscriberDefinition<string>)definition).RetryDelayResolver);
     }
 
     [Fact]
@@ -126,6 +128,7 @@ public sealed class RabbitSubscriberRegistrationTests
         var definition = registrations[0].BuildDefinition(provider);
         Assert.Equal("orders.queue", definition.QueueName);
         Assert.Equal(2, definition.MaxConcurrency);
+        Assert.NotNull(((SubscriberDefinition<string>)definition).RetryDelayResolver);
     }
 
     [Fact]
@@ -207,6 +210,39 @@ public sealed class RabbitSubscriberRegistrationBuilderTests
         Assert.Equal(SubscriberErrorStrategyKind.RetryThenDeadLetter, definition.ErrorHandling.Strategy);
         Assert.Null(definition.ErrorHandling.RetryRoute);
         Assert.Null(definition.ErrorHandling.DeadLetterRoute);
+        Assert.Equal(
+            TimeSpan.FromMilliseconds(250),
+            definition.RetryDelayResolver!(
+                new SubscriberRetryDelayContext<string>(
+                    definition.QueueName,
+                    envelope,
+                    new InvalidOperationException("boom"),
+                    1)));
+    }
+
+    [Fact]
+    public void Build_UsesRetryDelayResolver_FromDependencyInjection()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<ISubscriberRetryDelayResolver<string>, SharedCustomStringRetryDelayResolver>();
+        using var provider = services.BuildServiceProvider();
+
+        var builder = new RabbitSubscriberRegistrationBuilder<string>
+        {
+            Queue = "orders.queue",
+        };
+
+        builder.Handle((_, _) => Task.CompletedTask);
+
+        var definition = builder.Build(provider);
+        var delay = definition.RetryDelayResolver!(
+            new SubscriberRetryDelayContext<string>(
+                definition.QueueName,
+                new MessageEnvelope<string>("body", new Dictionary<string, object?>(), "orders.created", "orders", "message-1", "corr-1", DateTimeOffset.UtcNow),
+                new InvalidOperationException("boom"),
+                2));
+
+        Assert.Equal(TimeSpan.FromSeconds(9), delay);
     }
 
     [Fact]
@@ -398,6 +434,39 @@ public sealed class RabbitSubscriberRegistrationBuilderTests
             LastComponentFailureStage = null;
         }
     }
+}
+
+public sealed class SubscriberRetryDelayResolverServiceCollectionTests
+{
+    [Fact]
+    public void AddSphereRabbitMq_RegistersDefaultSubscriberRetryDelayResolver()
+    {
+        var services = new ServiceCollection();
+        services.AddSphereRabbitMq();
+
+        using var provider = services.BuildServiceProvider();
+        var resolver = provider.GetRequiredService<ISubscriberRetryDelayResolver<string>>();
+
+        Assert.IsType<DefaultSubscriberRetryDelayResolver<string>>(resolver);
+    }
+
+    [Fact]
+    public void AddSphereRabbitMq_AllowsHostToOverrideSubscriberRetryDelayResolver()
+    {
+        var services = new ServiceCollection();
+        services.AddSphereRabbitMq();
+        services.AddSingleton<ISubscriberRetryDelayResolver<string>, SharedCustomStringRetryDelayResolver>();
+
+        using var provider = services.BuildServiceProvider();
+        var resolver = provider.GetRequiredService<ISubscriberRetryDelayResolver<string>>();
+
+        Assert.IsType<SharedCustomStringRetryDelayResolver>(resolver);
+    }
+}
+
+file sealed class SharedCustomStringRetryDelayResolver : ISubscriberRetryDelayResolver<string>
+{
+    public TimeSpan Resolve(SubscriberRetryDelayContext<string> context) => TimeSpan.FromSeconds(9);
 }
 
 public sealed class RabbitMqSubscribersHostedServiceTests

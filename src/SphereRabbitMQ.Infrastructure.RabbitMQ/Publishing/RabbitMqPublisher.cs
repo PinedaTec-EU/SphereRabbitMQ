@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Globalization;
 
 using RabbitMQ.Client;
 using RabbitMQ.Client.Exceptions;
@@ -44,6 +45,7 @@ internal sealed class RabbitMqPublisher : IRabbitMQPublisher
         ArgumentException.ThrowIfNullOrWhiteSpace(routingKey);
 
         options ??= new PublishOptions();
+        ValidatePublishOptions(options);
         await using var channelLease = await _channelPool.RentAsync(cancellationToken);
         var channel = channelLease.Channel;
 
@@ -65,6 +67,7 @@ internal sealed class RabbitMqPublisher : IRabbitMQPublisher
             MessageId = options.MessageId,
             Timestamp = new AmqpTimestamp((options.Timestamp ?? DateTimeOffset.UtcNow).ToUnixTimeSeconds()),
             Headers = new Dictionary<string, object?>(options.Headers, StringComparer.Ordinal),
+            Expiration = options.TimeToLive is null ? null : FormatExpiration(options.TimeToLive.Value),
         };
         ReadOnlyMemory<byte> body;
 
@@ -112,4 +115,15 @@ internal sealed class RabbitMqPublisher : IRabbitMQPublisher
             }
         }
     }
+
+    private static void ValidatePublishOptions(PublishOptions options)
+    {
+        if (options.TimeToLive is not null && options.TimeToLive <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options), "Message ttl must be greater than zero.");
+        }
+    }
+
+    private static string FormatExpiration(TimeSpan timeToLive)
+        => Convert.ToInt64(Math.Ceiling(timeToLive.TotalMilliseconds), CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture);
 }

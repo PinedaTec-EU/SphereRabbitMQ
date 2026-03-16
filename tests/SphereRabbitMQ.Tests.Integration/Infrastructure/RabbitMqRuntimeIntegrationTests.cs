@@ -1009,6 +1009,44 @@ public sealed class RabbitMqRuntimeIntegrationTests
     }
 
     [Fact]
+    public async Task DeserializeFailure_SendsDirectlyToDeadLetter_WhenRetryIsEnabled()
+    {
+        if (!_fixture.IsAvailable)
+        {
+            return;
+        }
+
+        var services = CreateServices();
+        await using var provider = services.BuildServiceProvider();
+        var subscriber = provider.GetRequiredService<IRabbitMQSubscriber>();
+        await PurgeQueuesAsync("orders.created", "orders.created.retry.step1", "orders.created.dlq");
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+        var subscription = Task.Run(() => subscriber.SubscribeAsync(
+            new SubscriberDefinition<OrderCreated>
+            {
+                QueueName = "orders.created",
+                PrefetchCount = 1,
+                MaxConcurrency = 1,
+                ErrorHandling = new SubscriberErrorHandlingSettings
+                {
+                    Strategy = SubscriberErrorStrategyKind.RetryThenDeadLetter,
+                    MaxRetryAttempts = 3,
+                },
+                Handler = (_, _) => Task.CompletedTask,
+            },
+            cts.Token));
+
+        await PublishRawMessageAsync("orders", "orders.created", "not-json"u8.ToArray());
+        var dlqMessage = await WaitForRawDlqMessageAsync();
+        cts.Cancel();
+        await IgnoreCancellationAsync(subscription);
+
+        Assert.Equal("not-json", System.Text.Encoding.UTF8.GetString(dlqMessage.ToArray()));
+        Assert.Equal(0u, await CountMessagesAsync("orders.created.retry.step1"));
+    }
+
+    [Fact]
     public async Task PublishAsync_NotifiesPublisherFailureHandler_WhenSerializerThrows()
     {
         if (!_fixture.IsAvailable)

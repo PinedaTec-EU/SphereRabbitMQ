@@ -11,4 +11,6 @@ public sealed record PublishOptions
     public bool Persistent { get; init; } = true;
 
     public DateTimeOffset? Timestamp { get; init; }
+
+    public TimeSpan? TimeToLive { get; init; }
 }

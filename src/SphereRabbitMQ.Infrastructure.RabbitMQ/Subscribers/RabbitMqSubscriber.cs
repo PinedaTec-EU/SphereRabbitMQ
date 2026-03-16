@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using RabbitMQ.Client.Exceptions;
+using System.Globalization;
 
 using SphereRabbitMQ.Abstractions.Publishing;
 using SphereRabbitMQ.Abstractions.Serialization;
@@ -162,12 +163,14 @@ internal sealed class RabbitMqSubscriber : IRabbitMQSubscriber
                 _logger.LogWarning("Retrying message {MessageId} with retry count {RetryCount}.", envelope.MessageId, failureDecision.RetryCount);
                 try
                 {
+                    var retryDelay = ResolveRetryDelay(definition, envelope, exception, failureDecision.RetryCount);
                     await PublishForwardAsync(
                         failureDecision.RetryRoute?.Exchange ?? envelope.Exchange,
                         failureDecision.RetryRoute?.RoutingKey ?? envelope.RoutingKey,
                         envelope.Body,
                         envelope,
                         failureDecision.RetryCount,
+                        retryDelay,
                         cancellationToken);
                 }
                 catch (Exception publishException)
@@ -186,6 +189,7 @@ internal sealed class RabbitMqSubscriber : IRabbitMQSubscriber
                         envelope.Body,
                         envelope,
                         retryMetadata.RetryCount,
+                        null,
                         cancellationToken);
                 }
                 catch (Exception publishException)
@@ -212,6 +216,7 @@ internal sealed class RabbitMqSubscriber : IRabbitMQSubscriber
         TMessage message,
         MessageEnvelope<TMessage> envelope,
         int retryCount,
+        TimeSpan? retryDelay,
         CancellationToken cancellationToken)
     {
         var headers = _retryHeaderAccessor.Write(envelope.Headers, retryCount);
@@ -225,6 +230,7 @@ internal sealed class RabbitMqSubscriber : IRabbitMQSubscriber
                 MessageId = envelope.MessageId,
                 Timestamp = envelope.Timestamp,
                 Headers = headers,
+                TimeToLive = retryDelay,
             },
             cancellationToken);
     }
@@ -295,6 +301,7 @@ internal sealed class RabbitMqSubscriber : IRabbitMQSubscriber
         SemaphoreSlim channelOperationLock,
         CancellationToken cancellationToken)
     {
+        exception = NormalizeComponentFailureException(stage, exception);
         var retryMetadata = _retryHeaderAccessor.Read(rawEnvelope.Headers);
         var retryDecision = _retryPolicyResolver.Resolve(definition.ErrorHandling, retryMetadata, exception);
         var failureDecision = ResolveDefaultComponentFailureDecision(rawEnvelope, definition, exception, retryDecision);
@@ -304,6 +311,7 @@ internal sealed class RabbitMqSubscriber : IRabbitMQSubscriber
         switch (failureDecision.Disposition)
         {
             case SubscriberFailureDisposition.Retry:
+                var retryDelay = ResolveDefaultRetryDelay(failureDecision.RetryCount);
                 await PublishRawForwardAsync(
                     channel,
                     channelOperationLock,
@@ -312,6 +320,7 @@ internal sealed class RabbitMqSubscriber : IRabbitMQSubscriber
                     args,
                     rawEnvelope,
                     failureDecision.RetryCount,
+                    retryDelay,
                     cancellationToken);
                 await AcknowledgeAsync(definition, rawEnvelope, args, channel, channelOperationLock, cancellationToken);
                 break;
@@ -324,6 +333,7 @@ internal sealed class RabbitMqSubscriber : IRabbitMQSubscriber
                     args,
                     rawEnvelope,
                     failureDecision.RetryCount,
+                    null,
                     cancellationToken);
                 await AcknowledgeAsync(definition, rawEnvelope, args, channel, channelOperationLock, cancellationToken);
                 break;
@@ -390,6 +400,7 @@ internal sealed class RabbitMqSubscriber : IRabbitMQSubscriber
         BasicDeliverEventArgs args,
         MessageEnvelope<ReadOnlyMemory<byte>> rawEnvelope,
         int retryCount,
+        TimeSpan? retryDelay,
         CancellationToken cancellationToken)
     {
         var properties = new BasicProperties
@@ -400,6 +411,7 @@ internal sealed class RabbitMqSubscriber : IRabbitMQSubscriber
             MessageId = rawEnvelope.MessageId,
             Timestamp = args.BasicProperties.Timestamp,
             Headers = new Dictionary<string, object?>(_retryHeaderAccessor.Write(rawEnvelope.Headers, retryCount), StringComparer.Ordinal),
+            Expiration = retryDelay is null ? args.BasicProperties.Expiration : FormatExpiration(retryDelay.Value),
         };
 
         await ExecuteChannelOperationAsync(
@@ -407,6 +419,63 @@ internal sealed class RabbitMqSubscriber : IRabbitMQSubscriber
             async ct => await channel.BasicPublishAsync(exchange, routingKey, true, properties, rawEnvelope.Body, ct),
             cancellationToken);
     }
+
+    private static TimeSpan ResolveRetryDelay<TMessage>(
+        SubscriberDefinition<TMessage> definition,
+        MessageEnvelope<TMessage> envelope,
+        Exception exception,
+        int attemptNumber)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        ArgumentNullException.ThrowIfNull(envelope);
+        ArgumentNullException.ThrowIfNull(exception);
+
+        if (attemptNumber <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(attemptNumber), "Retry attempt number must be greater than zero.");
+        }
+
+        if (definition.RetryDelayResolver is null)
+        {
+            return ResolveDefaultRetryDelay(attemptNumber);
+        }
+
+        var retryDelay = definition.RetryDelayResolver(
+            new SubscriberRetryDelayContext<TMessage>(
+                definition.QueueName,
+                envelope,
+                exception,
+                attemptNumber));
+
+        if (retryDelay <= TimeSpan.Zero)
+        {
+            throw new InvalidOperationException($"Retry delay resolver returned a non-positive delay for queue '{definition.QueueName}' and attempt '{attemptNumber}'.");
+        }
+
+        return retryDelay;
+    }
+
+    private static TimeSpan ResolveDefaultRetryDelay(int attemptNumber)
+    {
+        if (attemptNumber <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(attemptNumber), "Retry attempt number must be greater than zero.");
+        }
+
+        return TimeSpan.FromMilliseconds(attemptNumber * 250);
+    }
+
+    private static Exception NormalizeComponentFailureException(SubscriberComponentFailureStage stage, Exception exception)
+    {
+        ArgumentNullException.ThrowIfNull(exception);
+
+        return stage is SubscriberComponentFailureStage.Deserialize
+            ? new NonRetriableMessageException("Message deserialization failed.", exception)
+            : exception;
+    }
+
+    private static string FormatExpiration(TimeSpan timeToLive)
+        => Convert.ToInt64(Math.Ceiling(timeToLive.TotalMilliseconds), CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture);
 
     private async Task AcknowledgeAsync<TMessage>(
         SubscriberDefinition<TMessage> definition,

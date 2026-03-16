@@ -1,7 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
 using SphereRabbitMQ.Abstractions.Subscribers;
+using SphereRabbitMQ.Application.Retry;
 using SphereRabbitMQ.Domain.Subscribers;
 using SphereRabbitMQ.Domain.Messaging;
+using SphereRabbitMQ.Domain.Retry;
 
 namespace SphereRabbitMQ.DependencyInjection.Subscribers;
 
@@ -133,6 +135,7 @@ public sealed class RabbitSubscriberRegistrationBuilder<TMessage>
             Handler = _handlerFactory(serviceProvider),
             DeadLetterNotificationHandler = _deadLetterNotificationFactory?.Invoke(serviceProvider),
             ComponentFailureHandler = _componentFailureHandlerFactory?.Invoke(serviceProvider),
+            RetryDelayResolver = (serviceProvider.GetService<ISubscriberRetryDelayResolver<TMessage>>() ?? new DefaultSubscriberRetryDelayResolver<TMessage>()).Resolve,
             ErrorHandling = ErrorHandling.Build(),
         };
     }

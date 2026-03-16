@@ -45,6 +45,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ISubscriberInfrastructureRouteResolver, DefaultSubscriberInfrastructureRouteResolver>();
         services.AddSingleton<ISubscriberTopologyExpectationProvider, DefaultSubscriberTopologyExpectationProvider>();
         services.AddSingleton<IRetryPolicyResolver, DefaultRetryPolicyResolver>();
+        services.AddSingleton(typeof(ISubscriberRetryDelayResolver<>), typeof(DefaultSubscriberRetryDelayResolver<>));
         services.AddSingleton<IRabbitMqTopologyValidator, RabbitMqTopologyValidator>();
         services.AddHostedService<RabbitMqTopologyValidationHostedService>();
         services.AddHostedService<RabbitMqSubscribersHostedService>();
