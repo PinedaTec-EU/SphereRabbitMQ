@@ -389,6 +389,77 @@ public sealed class TopologyNormalizationServiceTests
     }
 
     [Fact]
+    public async Task NormalizeAsync_TreatsDeclaredDeadLetterFlowArtifactsAsSecondary_ForDebugScopeSelection()
+    {
+        ITopologyNormalizer topologyNormalizer = new TopologyNormalizationService();
+        var topologyDocument = new TopologyDocument
+        {
+            DebugQueues = new DebugQueuesDocument
+            {
+                Enabled = true,
+                Exchanges = new DebugQueueScopeDocument
+                {
+                    Main = true,
+                    Secondary = false,
+                },
+                Queues = new DebugQueueScopeDocument
+                {
+                    Main = true,
+                    Secondary = false,
+                },
+            },
+            VirtualHosts =
+            [
+                new VirtualHostDocument
+                {
+                    Name = "sales",
+                    Exchanges =
+                    [
+                        new ExchangeDocument { Name = "orders", Type = "topic" },
+                        new ExchangeDocument { Name = "orders.dlx", Type = "direct" },
+                    ],
+                    Queues =
+                    [
+                        new QueueDocument
+                        {
+                            Name = "orders",
+                            DeadLetter = new DeadLetterDocument
+                            {
+                                Enabled = true,
+                            },
+                        },
+                        new QueueDocument { Name = "orders.dlq" },
+                    ],
+                    Bindings =
+                    [
+                        new BindingDocument
+                        {
+                            SourceExchange = "orders",
+                            Destination = "orders",
+                            DestinationType = "queue",
+                            RoutingKey = "orders.created",
+                        },
+                        new BindingDocument
+                        {
+                            SourceExchange = "orders.dlx",
+                            Destination = "orders.dlq",
+                            DestinationType = "queue",
+                            RoutingKey = "orders",
+                        },
+                    ],
+                },
+            ],
+        };
+
+        var topologyDefinition = await topologyNormalizer.NormalizeAsync(topologyDocument);
+        var virtualHost = topologyDefinition.VirtualHosts.Single();
+
+        Assert.Contains(virtualHost.Queues, queue => queue.Name == "orders.debug");
+        Assert.DoesNotContain(virtualHost.Queues, queue => queue.Name == "orders.dlx.debug");
+        Assert.DoesNotContain(virtualHost.Queues, queue => queue.Name == "orders.dlq.debug");
+    }
+
+    [Fact]
     public async Task NormalizeAsync_Throws_WhenDeadLetterQueueTargetOmitsQueueName()
     {
         ITopologyNormalizer topologyNormalizer = new TopologyNormalizationService();

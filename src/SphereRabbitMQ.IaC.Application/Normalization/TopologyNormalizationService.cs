@@ -62,12 +62,15 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
             AppendDerivedArtifacts(queue, namingPolicy, generatedExchanges, generatedQueues, generatedBindings);
         }
 
+        var (mainExchanges, explicitSecondaryExchanges, mainQueues, explicitSecondaryQueues) =
+            SplitDeclaredArtifactsByDebugScope(explicitExchanges, explicitQueues, namingPolicy);
+
         AppendDebugArtifacts(
             debugQueues,
-            explicitExchanges,
-            generatedExchanges,
-            explicitQueues,
-            generatedQueues,
+            mainExchanges,
+            generatedExchanges.Concat(explicitSecondaryExchanges).ToArray(),
+            mainQueues,
+            generatedQueues.Concat(explicitSecondaryQueues).ToArray(),
             explicitBindings.Concat(generatedBindings),
             generatedQueues,
             generatedBindings);
@@ -200,6 +203,71 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
                 AppendDeadLetterArtifacts(queue, retryDeadLetter, namingPolicy, exchanges, queues, bindings);
             }
         }
+    }
+
+    private static (
+        IReadOnlyCollection<ExchangeDefinition> MainExchanges,
+        IReadOnlyCollection<ExchangeDefinition> ExplicitSecondaryExchanges,
+        IReadOnlyCollection<QueueDefinition> MainQueues,
+        IReadOnlyCollection<QueueDefinition> ExplicitSecondaryQueues)
+        SplitDeclaredArtifactsByDebugScope(
+            IReadOnlyCollection<ExchangeDefinition> explicitExchanges,
+            IReadOnlyCollection<QueueDefinition> explicitQueues,
+            NamingConventionPolicy namingPolicy)
+    {
+        var (secondaryExchangeNames, secondaryQueueNames) =
+            CollectDerivedSecondaryArtifactNames(explicitQueues, namingPolicy);
+
+        var mainExchanges = explicitExchanges
+            .Where(exchange => !secondaryExchangeNames.Contains(exchange.Name))
+            .ToArray();
+        var explicitSecondaryExchanges = explicitExchanges
+            .Where(exchange => secondaryExchangeNames.Contains(exchange.Name))
+            .ToArray();
+        var mainQueues = explicitQueues
+            .Where(queue => !secondaryQueueNames.Contains(queue.Name))
+            .ToArray();
+        var explicitSecondaryQueues = explicitQueues
+            .Where(queue => secondaryQueueNames.Contains(queue.Name))
+            .ToArray();
+
+        return (mainExchanges, explicitSecondaryExchanges, mainQueues, explicitSecondaryQueues);
+    }
+
+    private static (
+        IReadOnlySet<string> SecondaryExchangeNames,
+        IReadOnlySet<string> SecondaryQueueNames)
+        CollectDerivedSecondaryArtifactNames(
+            IEnumerable<QueueDefinition> queues,
+            NamingConventionPolicy namingPolicy)
+    {
+        var secondaryExchangeNames = new HashSet<string>(StringComparer.Ordinal);
+        var secondaryQueueNames = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var queue in queues)
+        {
+            if (queue.Retry is { Enabled: true } retry)
+            {
+                secondaryExchangeNames.Add(retry.ExchangeName ?? namingPolicy.GetRetryExchangeName(queue.Name));
+
+                for (var index = 0; index < retry.Steps.Count; index++)
+                {
+                    var step = retry.Steps[index];
+                    var stepName = step.Name ?? namingPolicy.GetRetryStepToken(index);
+                    secondaryQueueNames.Add(step.QueueName ?? namingPolicy.GetRetryQueueName(queue.Name, stepName));
+                }
+            }
+
+            if (queue.DeadLetter is not { Enabled: true, DestinationType: DeadLetterDestinationType.Generated } deadLetter)
+            {
+                continue;
+            }
+
+            secondaryExchangeNames.Add(deadLetter.ExchangeName ?? namingPolicy.GetDeadLetterExchangeName(queue.Name));
+            secondaryQueueNames.Add(deadLetter.QueueName ?? namingPolicy.GetDeadLetterQueueName(queue.Name));
+        }
+
+        return (secondaryExchangeNames, secondaryQueueNames);
     }
 
     private static void AppendDeadLetterArtifacts(
