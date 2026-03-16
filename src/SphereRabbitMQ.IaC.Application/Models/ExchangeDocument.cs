@@ -18,6 +18,8 @@ public sealed record ExchangeDocument
 
     public bool Internal { get; init; }
 
+    public bool DebugQueue { get; init; }
+
     public IReadOnlyDictionary<string, object?> Arguments { get; init; } =
         new Dictionary<string, object?>(StringComparer.Ordinal);
 

@@ -20,6 +20,8 @@ public sealed record QueueDocument
 
     public string? Ttl { get; init; }
 
+    public bool DebugQueue { get; init; }
+
     public IReadOnlyDictionary<string, object?> Arguments { get; init; } =
         new Dictionary<string, object?>(StringComparer.Ordinal);
 
