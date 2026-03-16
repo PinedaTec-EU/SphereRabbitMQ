@@ -383,7 +383,7 @@ debugQueues:
 Selection rules:
 
 - `main`: artifacts declared directly in YAML (`virtualHosts[].exchanges[]` and `virtualHosts[].queues[]`).
-- `secondary`: generated artifacts (retry and dead-letter exchanges/queues).
+- `secondary`: generated artifacts (retry and dead-letter exchanges/queues), including explicitly declared artifacts whose names belong to the same retry/dead-letter naming flow.
 - defaults are `exchanges.main: true`, `exchanges.secondary: false`, `queues.main: false`, `queues.secondary: false`.
 
 Debug queue conventions are deterministic:
