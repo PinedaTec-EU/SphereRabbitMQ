@@ -3,6 +3,8 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
+using NUlid;
+
 using Moq;
 
 using SphereRabbitMQ.Abstractions.Configuration;
@@ -172,7 +174,7 @@ public sealed class RabbitMqTopologyInitializationHostedServiceTests
 
     private static string CreateTopologyFile()
     {
-        var topologyFilePath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.yaml");
+        var topologyFilePath = Path.Combine(Path.GetTempPath(), $"{Ulid.NewUlid()}.yaml");
         File.WriteAllText(topologyFilePath, "virtualHosts:\n  - name: sales\n");
         return topologyFilePath;
     }

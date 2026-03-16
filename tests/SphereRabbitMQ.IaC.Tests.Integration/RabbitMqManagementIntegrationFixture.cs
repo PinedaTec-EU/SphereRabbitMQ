@@ -10,6 +10,8 @@ using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Management;
 using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Management.Interfaces;
 using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Read;
 
+using NUlid;
+
 namespace SphereRabbitMQ.IaC.Tests.Integration;
 
 public sealed class RabbitMqManagementIntegrationFixture : IAsyncLifetime, IDisposable
@@ -45,7 +47,7 @@ public sealed class RabbitMqManagementIntegrationFixture : IAsyncLifetime, IDisp
     public RabbitMqManagementIntegrationFixture()
     {
         _httpClient = new HttpClient();
-        VirtualHostName = $"{VirtualHostPrefix}-{Guid.NewGuid():N}";
+        VirtualHostName = $"{VirtualHostPrefix}-{Ulid.NewUlid()}";
 
         if (!RabbitMqIntegrationTestSettings.TryCreate(out var settings) || settings is null)
         {

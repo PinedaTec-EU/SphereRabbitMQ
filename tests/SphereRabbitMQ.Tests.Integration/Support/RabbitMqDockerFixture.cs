@@ -1,5 +1,10 @@
 using System.Diagnostics;
+using System.Net.Http.Headers;
 using System.Net.Sockets;
+using System.Text;
+
+using NUlid;
+
 using RabbitMQ.Client;
 
 namespace SphereRabbitMQ.Tests.Integration.Support;
@@ -7,15 +12,21 @@ namespace SphereRabbitMQ.Tests.Integration.Support;
 public sealed class RabbitMqDockerFixture : IAsyncLifetime
 {
     private const string DefaultHostName = "localhost";
+    private const string DefaultManagementBaseUri = "http://localhost:15672/api/";
     private const string DefaultPassword = "guest";
     private const string DefaultUserName = "guest";
     private const string DefaultVirtualHost = "/";
+    private const string TestVirtualHostPrefix = "test-sphere-runtime-it";
 
-    private readonly string _containerName = $"sphere-rabbitmq-tests-{Guid.NewGuid():N}";
+    private readonly string _containerName = $"sphere-rabbitmq-tests-{Ulid.NewUlid()}";
+    private readonly HttpClient _httpClient = new();
     private string _hostName = DefaultHostName;
+    private string _managementBaseUri = DefaultManagementBaseUri;
     private string _password = DefaultPassword;
+    private string _bootstrapVirtualHost = DefaultVirtualHost;
     private string _userName = DefaultUserName;
-    private string _virtualHost = DefaultVirtualHost;
+    private string _virtualHost = $"{TestVirtualHostPrefix}-{Ulid.NewUlid()}";
+    private bool _usesDockerContainer;
 
     public int AmqpPort { get; private set; }
 
@@ -30,9 +41,10 @@ public sealed class RabbitMqDockerFixture : IAsyncLifetime
             _hostName = settings.HostName;
             _userName = settings.UserName;
             _password = settings.Password;
-            _virtualHost = settings.VirtualHost;
+            _bootstrapVirtualHost = settings.VirtualHost;
+            _managementBaseUri = ResolveManagementBaseUri(_hostName);
             AmqpPort = settings.Port;
-            IsAvailable = await WaitForBrokerAsync();
+            IsAvailable = await WaitForBrokerAsync(_bootstrapVirtualHost);
 
             if (!IsAvailable)
             {
@@ -41,6 +53,7 @@ public sealed class RabbitMqDockerFixture : IAsyncLifetime
                     "Set SPHERE_RABBITMQ_AMQP_HOST/SPHERE_RABBITMQ_AMQP_PORT explicitly or remove SPHERE_RABBITMQ_* settings to fall back to Docker.");
             }
 
+            await RecreateManagedVirtualHostAsync();
             await ProvisionTopologyAsync();
             return;
         }
@@ -55,10 +68,13 @@ public sealed class RabbitMqDockerFixture : IAsyncLifetime
         var managementPort = GetFreePort();
 
         await RunDockerAsync($"run -d --rm --name {_containerName} -p {AmqpPort}:5672 -p {managementPort}:15672 rabbitmq:3.13-management");
-        IsAvailable = await WaitForBrokerAsync();
+        _usesDockerContainer = true;
+        _managementBaseUri = $"http://{_hostName}:{managementPort}/api/";
+        IsAvailable = await WaitForBrokerAsync(_bootstrapVirtualHost);
 
         if (IsAvailable)
         {
+            await RecreateManagedVirtualHostAsync();
             await ProvisionTopologyAsync();
             return;
         }
@@ -68,10 +84,14 @@ public sealed class RabbitMqDockerFixture : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
+        await DeleteManagedVirtualHostAsync();
+
         if (!string.IsNullOrWhiteSpace(_containerName))
         {
             await RunDockerAsync($"rm -f {_containerName}", ignoreExitCode: true);
         }
+
+        _httpClient.Dispose();
     }
 
     private async Task ProvisionTopologyAsync()
@@ -129,23 +149,50 @@ public sealed class RabbitMqDockerFixture : IAsyncLifetime
     public string CreateConnectionString()
         => $"amqp://{_userName}:{_password}@{_hostName}:{AmqpPort}/{Uri.EscapeDataString(_virtualHost)}";
 
-    private async Task<bool> WaitForBrokerAsync()
+    private async Task RecreateManagedVirtualHostAsync()
     {
-        var factory = CreateConnectionFactory();
-        for (var attempt = 0; attempt < 40; attempt++)
+        await DeleteManagedVirtualHostAsync();
+        await SendManagementRequestAsync(HttpMethod.Put, $"vhosts/{Uri.EscapeDataString(_virtualHost)}");
+        await SendManagementRequestAsync(
+            HttpMethod.Put,
+            $"permissions/{Uri.EscapeDataString(_virtualHost)}/{Uri.EscapeDataString(_userName)}",
+            "{\"configure\":\".*\",\"write\":\".*\",\"read\":\".*\"}");
+    }
+
+    private async Task DeleteManagedVirtualHostAsync()
+    {
+        try
         {
-            try
+            await SendManagementRequestAsync(HttpMethod.Delete, $"vhosts/{Uri.EscapeDataString(_virtualHost)}", allowNotFound: true);
+        }
+        catch
+        {
+            if (!_usesDockerContainer)
             {
-                await using var connection = await factory.CreateConnectionAsync();
-                return connection.IsOpen;
-            }
-            catch
-            {
-                await Task.Delay(500);
+                throw;
             }
         }
+    }
 
-        return false;
+    private async Task SendManagementRequestAsync(HttpMethod method, string relativePath, string? jsonContent = null, bool allowNotFound = false)
+    {
+        using var request = new HttpRequestMessage(method, new Uri(new Uri(_managementBaseUri), relativePath));
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Basic",
+            Convert.ToBase64String(Encoding.UTF8.GetBytes($"{_userName}:{_password}")));
+
+        if (jsonContent is not null)
+        {
+            request.Content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+        }
+
+        using var response = await _httpClient.SendAsync(request);
+        if (allowNotFound && response.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return;
+        }
+
+        response.EnsureSuccessStatusCode();
     }
 
     private static async Task RunDockerAsync(string arguments, bool ignoreExitCode = false)
@@ -164,6 +211,46 @@ public sealed class RabbitMqDockerFixture : IAsyncLifetime
             throw new InvalidOperationException($"Docker command failed: docker {arguments}. {error}");
         }
     }
+
+    private static string ResolveManagementBaseUri(string hostName)
+    {
+        var configuredManagementUrl = Environment.GetEnvironmentVariable("SPHERE_RABBITMQ_MANAGEMENT_URL");
+        return string.IsNullOrWhiteSpace(configuredManagementUrl)
+            ? $"http://{hostName}:15672/api/"
+            : configuredManagementUrl;
+    }
+
+    private async Task<bool> WaitForBrokerAsync(string virtualHost)
+    {
+        var factory = CreateConnectionFactory(virtualHost);
+        for (var attempt = 0; attempt < 40; attempt++)
+        {
+            try
+            {
+                await using var connection = await factory.CreateConnectionAsync();
+                return connection.IsOpen;
+            }
+            catch
+            {
+                await Task.Delay(500);
+            }
+        }
+
+        return false;
+    }
+
+    private ConnectionFactory CreateConnectionFactory(string virtualHost)
+        => new()
+        {
+            HostName = _hostName,
+            Port = AmqpPort,
+            UserName = _userName,
+            Password = _password,
+            VirtualHost = virtualHost,
+            AutomaticRecoveryEnabled = true,
+            TopologyRecoveryEnabled = false,
+            ConsumerDispatchConcurrency = 1,
+        };
 
     private static int GetFreePort()
     {

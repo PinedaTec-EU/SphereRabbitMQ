@@ -2,6 +2,8 @@ using System.CommandLine;
 
 using Microsoft.Extensions.DependencyInjection;
 
+using NUlid;
+
 using Moq;
 
 using SphereRabbitMQ.IaC.Application.Apply;
@@ -33,7 +35,7 @@ public sealed class TopologyCommandHandlerAdditionalTests
     {
         var outputWriterMock = new Mock<ICommandOutputWriter>(MockBehavior.Strict);
         var templateCatalogMock = new Mock<ITopologyTemplateCatalog>(MockBehavior.Strict);
-        var outputPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.yaml");
+        var outputPath = Path.Combine(Path.GetTempPath(), $"{Ulid.NewUlid()}.yaml");
 
         try
         {
@@ -553,7 +555,7 @@ public sealed class TopologyRootCommandFactoryTests
     {
         var outputWriterMock = new Mock<ICommandOutputWriter>(MockBehavior.Strict);
         var templateCatalogMock = new Mock<ITopologyTemplateCatalog>(MockBehavior.Strict);
-        var outputPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.yaml");
+        var outputPath = Path.Combine(Path.GetTempPath(), $"{Ulid.NewUlid()}.yaml");
 
         try
         {
