@@ -62,15 +62,12 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
             AppendDerivedArtifacts(queue, namingPolicy, generatedExchanges, generatedQueues, generatedBindings);
         }
 
-        var (mainExchanges, explicitSecondaryExchanges, mainQueues, explicitSecondaryQueues) =
-            SplitDeclaredArtifactsByDebugScope(explicitExchanges, explicitQueues, namingPolicy);
-
         AppendDebugArtifacts(
             debugQueues,
-            mainExchanges,
-            generatedExchanges.Concat(explicitSecondaryExchanges).ToArray(),
-            mainQueues,
-            generatedQueues.Concat(explicitSecondaryQueues).ToArray(),
+            document.Exchanges,
+            explicitExchanges,
+            document.Queues,
+            explicitQueues,
             explicitBindings.Concat(generatedBindings),
             generatedQueues,
             generatedBindings);
@@ -205,71 +202,6 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
         }
     }
 
-    private static (
-        IReadOnlyCollection<ExchangeDefinition> MainExchanges,
-        IReadOnlyCollection<ExchangeDefinition> ExplicitSecondaryExchanges,
-        IReadOnlyCollection<QueueDefinition> MainQueues,
-        IReadOnlyCollection<QueueDefinition> ExplicitSecondaryQueues)
-        SplitDeclaredArtifactsByDebugScope(
-            IReadOnlyCollection<ExchangeDefinition> explicitExchanges,
-            IReadOnlyCollection<QueueDefinition> explicitQueues,
-            NamingConventionPolicy namingPolicy)
-    {
-        var (secondaryExchangeNames, secondaryQueueNames) =
-            CollectDerivedSecondaryArtifactNames(explicitQueues, namingPolicy);
-
-        var mainExchanges = explicitExchanges
-            .Where(exchange => !secondaryExchangeNames.Contains(exchange.Name))
-            .ToArray();
-        var explicitSecondaryExchanges = explicitExchanges
-            .Where(exchange => secondaryExchangeNames.Contains(exchange.Name))
-            .ToArray();
-        var mainQueues = explicitQueues
-            .Where(queue => !secondaryQueueNames.Contains(queue.Name))
-            .ToArray();
-        var explicitSecondaryQueues = explicitQueues
-            .Where(queue => secondaryQueueNames.Contains(queue.Name))
-            .ToArray();
-
-        return (mainExchanges, explicitSecondaryExchanges, mainQueues, explicitSecondaryQueues);
-    }
-
-    private static (
-        IReadOnlySet<string> SecondaryExchangeNames,
-        IReadOnlySet<string> SecondaryQueueNames)
-        CollectDerivedSecondaryArtifactNames(
-            IEnumerable<QueueDefinition> queues,
-            NamingConventionPolicy namingPolicy)
-    {
-        var secondaryExchangeNames = new HashSet<string>(StringComparer.Ordinal);
-        var secondaryQueueNames = new HashSet<string>(StringComparer.Ordinal);
-
-        foreach (var queue in queues)
-        {
-            if (queue.Retry is { Enabled: true } retry)
-            {
-                secondaryExchangeNames.Add(retry.ExchangeName ?? namingPolicy.GetRetryExchangeName(queue.Name));
-
-                for (var index = 0; index < retry.Steps.Count; index++)
-                {
-                    var step = retry.Steps[index];
-                    var stepName = step.Name ?? namingPolicy.GetRetryStepToken(index);
-                    secondaryQueueNames.Add(step.QueueName ?? namingPolicy.GetRetryQueueName(queue.Name, stepName));
-                }
-            }
-
-            if (queue.DeadLetter is not { Enabled: true, DestinationType: DeadLetterDestinationType.Generated } deadLetter)
-            {
-                continue;
-            }
-
-            secondaryExchangeNames.Add(deadLetter.ExchangeName ?? namingPolicy.GetDeadLetterExchangeName(queue.Name));
-            secondaryQueueNames.Add(deadLetter.QueueName ?? namingPolicy.GetDeadLetterQueueName(queue.Name));
-        }
-
-        return (secondaryExchangeNames, secondaryQueueNames);
-    }
-
     private static void AppendDeadLetterArtifacts(
         QueueDefinition queue,
         DeadLetterDefinition deadLetter,
@@ -316,10 +248,10 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
 
     private static void AppendDebugArtifacts(
         DebugQueuesDocument? debugQueues,
-        IReadOnlyCollection<ExchangeDefinition> mainExchanges,
-        IReadOnlyCollection<ExchangeDefinition> secondaryExchanges,
-        IReadOnlyCollection<QueueDefinition> mainQueues,
-        IReadOnlyCollection<QueueDefinition> secondaryQueues,
+        IReadOnlyList<ExchangeDocument> exchangeDocuments,
+        IReadOnlyList<ExchangeDefinition> explicitExchanges,
+        IReadOnlyList<QueueDocument> queueDocuments,
+        IReadOnlyList<QueueDefinition> explicitQueues,
         IEnumerable<BindingDefinition> existingBindings,
         ICollection<QueueDefinition> generatedQueues,
         ICollection<BindingDefinition> generatedBindings)
@@ -329,14 +261,27 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
             return;
         }
 
-        var selectedExchanges = SelectByScope(debugQueues.Exchanges, mainExchanges, secondaryExchanges)
+        var selectedExchanges = exchangeDocuments
+            .Where(exchange => exchange.DebugQueue)
+            .Join(
+                explicitExchanges,
+                exchange => exchange.Name.Trim(),
+                exchange => exchange.Name,
+                (_, exchange) => exchange,
+                StringComparer.Ordinal)
             .OrderBy(exchange => exchange.Name, StringComparer.Ordinal)
             .ToArray();
-        var selectedQueues = SelectByScope(debugQueues.Queues, mainQueues, secondaryQueues)
+        var selectedQueues = queueDocuments
+            .Where(queue => queue.DebugQueue)
+            .Join(
+                explicitQueues,
+                queue => queue.Name.Trim(),
+                queue => queue.Name,
+                (_, queue) => queue,
+                StringComparer.Ordinal)
             .OrderBy(queue => queue.Name, StringComparer.Ordinal)
             .ToArray();
-        var allQueues = mainQueues
-            .Concat(secondaryQueues)
+        var allQueues = explicitQueues
             .ToArray();
         var allBindings = existingBindings.ToArray();
         var generatedQueuesByName = new HashSet<string>(
@@ -501,13 +446,6 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
             BindingDestinationType.Queue,
             routingKey,
             metadata: CreateGeneratedMetadata(sourceQueueName));
-
-    private static IEnumerable<TArtifact> SelectByScope<TArtifact>(
-        DebugQueueScopeDocument scope,
-        IEnumerable<TArtifact> mainArtifacts,
-        IEnumerable<TArtifact> secondaryArtifacts)
-        => (scope.Main ? mainArtifacts : Array.Empty<TArtifact>())
-            .Concat(scope.Secondary ? secondaryArtifacts : Array.Empty<TArtifact>());
 
     private static IReadOnlyDictionary<string, string> CreateGeneratedMetadata(string sourceQueueName)
         => new Dictionary<string, string>(StringComparer.Ordinal)
