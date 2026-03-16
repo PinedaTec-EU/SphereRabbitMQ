@@ -1199,7 +1199,7 @@ public sealed class RabbitMqRuntimeIntegrationTests
 
         await channel.ExchangeDeclareAsync("orders.created.dlx", "direct", true, false, null, false, false);
         await channel.QueueDeclareAsync("orders.created.dlq", true, false, false, null, false, false);
-        await channel.QueueBindAsync("orders.created.dlq", "orders.created.dlx", "orders.created.dlq", null, false);
+        await channel.QueueBindAsync("orders.created.dlq", "orders.created.dlx", "orders.created", null, false);
     }
 
     private static async Task IgnoreCancellationAsync(Task task)

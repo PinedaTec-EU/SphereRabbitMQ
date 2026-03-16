@@ -25,6 +25,6 @@ public sealed class DefaultSubscriberInfrastructureRouteResolver : ISubscriberIn
 
         var deadLetterExchange = $"{queueName}.{DeadLetterExchangeSuffix}";
         var deadLetterQueue = $"{queueName}.{DeadLetterQueueSuffix}";
-        return new DeadLetterRouteDefinition(deadLetterExchange, deadLetterQueue, deadLetterQueue);
+        return new DeadLetterRouteDefinition(deadLetterExchange, queueName, deadLetterQueue);
     }
 }

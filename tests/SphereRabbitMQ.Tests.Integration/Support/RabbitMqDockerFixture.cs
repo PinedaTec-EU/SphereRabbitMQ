@@ -130,7 +130,7 @@ public sealed class RabbitMqDockerFixture : IAsyncLifetime
 
         await channel.ExchangeDeclareAsync("orders.created.dlx", "direct", true, false, null, false, false);
         await channel.QueueDeclareAsync("orders.created.dlq", true, false, false, null, false, false);
-        await channel.QueueBindAsync("orders.created.dlq", "orders.created.dlx", "orders.created.dlq", null, false);
+        await channel.QueueBindAsync("orders.created.dlq", "orders.created.dlx", "orders.created", null, false);
     }
 
     public ConnectionFactory CreateConnectionFactory()

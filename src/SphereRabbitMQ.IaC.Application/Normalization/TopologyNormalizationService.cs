@@ -208,7 +208,7 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
     {
         var exchangeName = deadLetter.ExchangeName ?? namingPolicy.GetDeadLetterExchangeName(queue.Name);
         var queueName = deadLetter.QueueName ?? namingPolicy.GetDeadLetterQueueName(queue.Name);
-        var routingKey = deadLetter.RoutingKey ?? queue.Name;
+        var routingKey = queue.Name;
 
         exchanges.Add(CreateGeneratedExchange(exchangeName, queue.Name));
         queues.Add(CreateGeneratedQueue(queueName, queue.Name, deadLetter.Ttl, null));
@@ -387,7 +387,7 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
                 : deadLetter.ExchangeName ?? namingPolicy.GetDeadLetterExchangeName(queueName);
             var deadLetterRoutingKey = deadLetter.DestinationType == DeadLetterDestinationType.Queue
                 ? deadLetter.RoutingKey ?? deadLetter.QueueName ?? queueName
-                : deadLetter.RoutingKey ?? queueName;
+                : queueName;
             SetArgument(arguments, TopologyNormalizationConsts.DeadLetterExchangeArgument, deadLetterExchangeName, queueName, issues);
             SetArgument(arguments, TopologyNormalizationConsts.DeadLetterRoutingKeyArgument, deadLetterRoutingKey, queueName, issues);
         }
@@ -511,6 +511,14 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
                     $"{path}/exchangeName",
                     TopologyIssueSeverity.Error));
             }
+        }
+        else if (!string.IsNullOrWhiteSpace(document.RoutingKey))
+        {
+            issues.Add(new TopologyIssue(
+                "generated-dead-letter-routing-key-is-fixed",
+                "Dead-letter destination type 'generated' cannot declare routingKey. SphereRabbitMQ always routes generated dead-letter traffic with the source queue name.",
+                $"{path}/routingKey",
+                TopologyIssueSeverity.Error));
         }
 
         return new DeadLetterDefinition(document.Enabled, destinationType, document.ExchangeName, document.QueueName, document.RoutingKey, ttl);

@@ -244,6 +244,7 @@ When dead-letter is configured for a subscriber, the runtime expects:
 
 - dead-letter exchange exists
 - dead-letter queue exists
+- the dead-letter binding uses the source queue name as routing key
 
 If any of those are missing, `SubscribeAsync` fails explicitly.
 

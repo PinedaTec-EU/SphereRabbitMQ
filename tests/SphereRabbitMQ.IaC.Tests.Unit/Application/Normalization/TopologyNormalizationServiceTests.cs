@@ -338,4 +338,36 @@ public sealed class TopologyNormalizationServiceTests
 
         Assert.Contains(exception.Issues, issue => issue.Code == "dead-letter-queue-target-required");
     }
+
+    [Fact]
+    public async Task NormalizeAsync_Throws_WhenGeneratedDeadLetterDeclaresRoutingKey()
+    {
+        ITopologyNormalizer topologyNormalizer = new TopologyNormalizationService();
+        var topologyDocument = new TopologyDocument
+        {
+            VirtualHosts =
+            [
+                new VirtualHostDocument
+                {
+                    Name = "sales",
+                    Queues =
+                    [
+                        new QueueDocument
+                        {
+                            Name = "orders.created",
+                            DeadLetter = new DeadLetterDocument
+                            {
+                                Enabled = true,
+                                RoutingKey = "custom.dlq.route",
+                            },
+                        },
+                    ],
+                },
+            ],
+        };
+
+        var exception = await Assert.ThrowsAsync<TopologyNormalizationException>(() => topologyNormalizer.NormalizeAsync(topologyDocument).AsTask());
+
+        Assert.Contains(exception.Issues, issue => issue.Code == "generated-dead-letter-routing-key-is-fixed");
+    }
 }

@@ -405,6 +405,8 @@ Operationally:
 - when TTL expires, the message is dead-lettered back to the main flow
 - dead-letter artifacts remain separate and visible in the plan
 - if retry is enabled for a queue, dead-letter must also be enabled for that queue
+- generated dead-letter topology always routes with the source queue name as routing key
+- `deadLetter.routingKey` is not configurable for generated dead-letter topology
 - the dead-letter queue can define its own optional `ttl`, which maps to `x-message-ttl`
 
 Important restriction:

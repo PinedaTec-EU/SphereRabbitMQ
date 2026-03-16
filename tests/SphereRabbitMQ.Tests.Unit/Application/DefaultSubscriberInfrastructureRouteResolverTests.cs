@@ -24,7 +24,7 @@ public sealed class DefaultSubscriberInfrastructureRouteResolverTests
         var route = resolver.ResolveDeadLetterRoute("orders.created");
 
         Assert.Equal("orders.created.dlx", route.Exchange);
-        Assert.Equal("orders.created.dlq", route.RoutingKey);
+        Assert.Equal("orders.created", route.RoutingKey);
         Assert.Equal("orders.created.dlq", route.QueueName);
     }
 }
