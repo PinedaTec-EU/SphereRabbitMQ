@@ -3,10 +3,14 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SphereRabbitMQ.Abstractions.Configuration;
 using SphereRabbitMQ.IaC.Application.Apply;
+using SphereRabbitMQ.IaC.Application.Normalization.Interfaces;
+using SphereRabbitMQ.IaC.Application.Parsing.Interfaces;
+using SphereRabbitMQ.IaC.Application.Validation.Interfaces;
 using SphereRabbitMQ.IaC.Domain.Planning;
 using SphereRabbitMQ.IaC.Domain.Topology;
 using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Configuration;
 using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Runtime.Interfaces;
+using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Startup.Interfaces;
 
 namespace SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Startup;
 
@@ -19,27 +23,52 @@ internal sealed class RabbitMqTopologyInitializationHostedService : IHostedServi
     private readonly ILogger<RabbitMqTopologyInitializationHostedService> _logger;
     private readonly SphereRabbitMqOptions _runtimeOptions;
     private readonly RabbitMqTopologyInitializationOptions _initializationOptions;
+    private readonly ITopologyParser _topologyParser;
+    private readonly ITopologyNormalizer _topologyNormalizer;
+    private readonly ITopologyValidator _topologyValidator;
+    private readonly IRuntimeTopologyYamlContractValidator _runtimeTopologyYamlContractValidator;
 
     public RabbitMqTopologyInitializationHostedService(
         IRabbitMqRuntimeServiceFactory runtimeServiceFactory,
         IOptions<SphereRabbitMqOptions> runtimeOptions,
         IOptions<RabbitMqTopologyInitializationOptions> initializationOptions,
+        ITopologyParser topologyParser,
+        ITopologyNormalizer topologyNormalizer,
+        ITopologyValidator topologyValidator,
+        IRuntimeTopologyYamlContractValidator runtimeTopologyYamlContractValidator,
         ILogger<RabbitMqTopologyInitializationHostedService> logger)
     {
         _runtimeServiceFactory = runtimeServiceFactory;
         _logger = logger;
         _runtimeOptions = runtimeOptions.Value;
         _initializationOptions = initializationOptions.Value;
+        _topologyParser = topologyParser;
+        _topologyNormalizer = topologyNormalizer;
+        _topologyValidator = topologyValidator;
+        _runtimeTopologyYamlContractValidator = runtimeTopologyYamlContractValidator;
     }
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        if (!_initializationOptions.Enabled)
+        if (!_initializationOptions.Enabled && !_initializationOptions.ValidateRuntimeContractAgainstYaml)
         {
             return;
         }
 
         var yamlFilePath = ResolveYamlFilePath();
+        var definition = await LoadValidatedDefinitionAsync(yamlFilePath, cancellationToken);
+
+        if (_initializationOptions.ValidateRuntimeContractAgainstYaml)
+        {
+            _logger.LogInformation("Validating RabbitMQ runtime subscriber contract against YAML file {YamlFilePath}.", yamlFilePath);
+            _runtimeTopologyYamlContractValidator.Validate(definition);
+        }
+
+        if (!_initializationOptions.Enabled)
+        {
+            return;
+        }
+
         _logger.LogInformation("Applying RabbitMQ topology from YAML file {YamlFilePath}.", yamlFilePath);
 
         await using var topologyStream = File.OpenRead(yamlFilePath);
@@ -64,6 +93,16 @@ internal sealed class RabbitMqTopologyInitializationHostedService : IHostedServi
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    private async Task<TopologyDefinition> LoadValidatedDefinitionAsync(string yamlFilePath, CancellationToken cancellationToken)
+    {
+        await using var topologyStream = File.OpenRead(yamlFilePath);
+        var topologyDocument = await _topologyParser.ParseAsync(topologyStream, cancellationToken);
+        var definition = await _topologyNormalizer.NormalizeAsync(topologyDocument, cancellationToken);
+        var validation = await _topologyValidator.ValidateAsync(definition, cancellationToken);
+        EnsureValidationSucceeded(validation, yamlFilePath);
+        return definition;
+    }
 
     private string ResolveYamlFilePath()
     {

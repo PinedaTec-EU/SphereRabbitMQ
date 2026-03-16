@@ -3,7 +3,7 @@ using SphereRabbitMQ.Domain.Subscribers;
 
 namespace SphereRabbitMQ.DependencyInjection.Subscribers;
 
-internal interface IRabbitSubscriberRegistration
+public interface IRabbitSubscriberRegistration
 {
     Task SubscribeAsync(IServiceProvider serviceProvider, IRabbitMQSubscriber subscriber, CancellationToken cancellationToken);
 

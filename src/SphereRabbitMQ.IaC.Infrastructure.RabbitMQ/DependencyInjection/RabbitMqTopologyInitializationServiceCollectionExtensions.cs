@@ -4,6 +4,7 @@ using SphereRabbitMQ.Abstractions.Configuration;
 using SphereRabbitMQ.DependencyInjection;
 using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Configuration;
 using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Startup;
+using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Startup.Interfaces;
 using SphereRabbitMQ.IaC.Infrastructure.Yaml.DependencyInjection;
 
 namespace SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.DependencyInjection;
@@ -48,6 +49,7 @@ public static class RabbitMqTopologyInitializationServiceCollectionExtensions
 
         services.AddYamlInfrastructure();
         services.AddRabbitMqInfrastructure();
+        services.AddSingleton<IRuntimeTopologyYamlContractValidator, RuntimeTopologyYamlContractValidator>();
 
         var hostedServicesToMove = ExtractRuntimeHostedServices(services);
 

@@ -8,10 +8,17 @@ using NUlid;
 using Moq;
 
 using SphereRabbitMQ.Abstractions.Configuration;
+using SphereRabbitMQ.Abstractions.Subscribers;
+using SphereRabbitMQ.Application.Subscribers;
+using SphereRabbitMQ.DependencyInjection;
+using SphereRabbitMQ.DependencyInjection.Subscribers;
 using SphereRabbitMQ.IaC.Application.Apply;
 using SphereRabbitMQ.IaC.Application.Apply.Interfaces;
 using SphereRabbitMQ.IaC.Application.Broker.Interfaces;
 using SphereRabbitMQ.IaC.Application.Export.Interfaces;
+using SphereRabbitMQ.IaC.Application.Normalization;
+using SphereRabbitMQ.IaC.Application.Validation;
+using SphereRabbitMQ.IaC.Application.Variables;
 using SphereRabbitMQ.IaC.Application.Workflows.Interfaces;
 using SphereRabbitMQ.IaC.Domain.Planning;
 using SphereRabbitMQ.IaC.Domain.Topology;
@@ -21,6 +28,8 @@ using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Management.Interfaces;
 using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Runtime;
 using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Runtime.Interfaces;
 using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Startup;
+using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Startup.Interfaces;
+using SphereRabbitMQ.IaC.Infrastructure.Yaml.Parsing;
 
 namespace SphereRabbitMQ.IaC.Tests.Unit.Infrastructure.RabbitMQ;
 
@@ -132,10 +141,44 @@ public sealed class RabbitMqTopologyInitializationHostedServiceTests
         }
     }
 
+    [Fact]
+    public async Task StartAsync_ValidatesRuntimeContractWithoutApplyingTopology_WhenInitializationIsDisabled()
+    {
+        var topologyFilePath = CreateTopologyFile();
+        try
+        {
+            var runtimeServiceFactoryMock = new Mock<IRabbitMqRuntimeServiceFactory>(MockBehavior.Strict);
+            var runtimeTopologyYamlContractValidatorMock = new Mock<IRuntimeTopologyYamlContractValidator>(MockBehavior.Strict);
+            runtimeTopologyYamlContractValidatorMock
+                .Setup(validator => validator.Validate(It.Is<TopologyDefinition>(definition =>
+                    definition.VirtualHosts.Count == 1 &&
+                    definition.VirtualHosts[0].Name == "sales")));
+
+            var hostedService = CreateHostedService(
+                runtimeServiceFactoryMock.Object,
+                topologyFilePath,
+                enabled: false,
+                validateRuntimeContractAgainstYaml: true,
+                runtimeTopologyYamlContractValidator: runtimeTopologyYamlContractValidatorMock.Object);
+
+            await hostedService.StartAsync(CancellationToken.None);
+
+            runtimeTopologyYamlContractValidatorMock.VerifyAll();
+            runtimeServiceFactoryMock.Verify(factory => factory.Create(It.IsAny<RabbitMqManagementOptions>()), Times.Never);
+        }
+        finally
+        {
+            File.Delete(topologyFilePath);
+        }
+    }
+
     private static RabbitMqTopologyInitializationHostedService CreateHostedService(
         IRabbitMqRuntimeServiceFactory runtimeServiceFactory,
         string topologyFilePath,
-        bool allowMigrations = false)
+        bool allowMigrations = false,
+        bool enabled = true,
+        bool validateRuntimeContractAgainstYaml = false,
+        IRuntimeTopologyYamlContractValidator? runtimeTopologyYamlContractValidator = null)
         => new(
             runtimeServiceFactory,
             Options.Create(new SphereRabbitMqOptions
@@ -148,9 +191,15 @@ public sealed class RabbitMqTopologyInitializationHostedServiceTests
             }),
             Options.Create(new RabbitMqTopologyInitializationOptions
             {
+                Enabled = enabled,
                 YamlFilePath = topologyFilePath,
                 AllowMigrations = allowMigrations,
+                ValidateRuntimeContractAgainstYaml = validateRuntimeContractAgainstYaml,
             }),
+            new TopologyYamlParser(new EnvironmentVariableResolver()),
+            new TopologyNormalizationService(),
+            new TopologyValidationService(),
+            runtimeTopologyYamlContractValidator ?? Mock.Of<IRuntimeTopologyYamlContractValidator>(),
             NullLogger<RabbitMqTopologyInitializationHostedService>.Instance);
 
     private static RabbitMqRuntimeServices CreateRuntimeServices(ITopologyWorkflowService workflowService)
@@ -177,5 +226,96 @@ public sealed class RabbitMqTopologyInitializationHostedServiceTests
         var topologyFilePath = Path.Combine(Path.GetTempPath(), $"{Ulid.NewUlid()}.yaml");
         File.WriteAllText(topologyFilePath, "virtualHosts:\n  - name: sales\n");
         return topologyFilePath;
+    }
+}
+
+public sealed class RuntimeTopologyYamlContractValidatorTests
+{
+    [Fact]
+    public void Validate_DoesNotThrow_WhenDiscardStrategyMatchesYamlQueue()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<ISubscriberInfrastructureRouteResolver, DefaultSubscriberInfrastructureRouteResolver>();
+        services.AddRabbitSubscriber<string>(
+            "orders.created",
+            (_, _) => Task.CompletedTask,
+            builder => builder.ErrorHandling.UseDiscard());
+        using var provider = services.BuildServiceProvider();
+
+        var validator = new RuntimeTopologyYamlContractValidator(
+            provider.GetServices<IRabbitSubscriberRegistration>(),
+            provider.GetRequiredService<ISubscriberInfrastructureRouteResolver>(),
+            provider,
+            Options.Create(new SphereRabbitMqOptions { VirtualHost = "sales" }));
+
+        var definition = new TopologyDefinition(
+            [
+                new VirtualHostDefinition(
+                    "sales",
+                    queues:
+                    [
+                        new QueueDefinition("orders.created"),
+                    ]),
+            ]);
+
+        validator.Validate(definition);
+    }
+
+    [Fact]
+    public void Validate_Throws_WhenSubscriberRequiresDeadLetterButYamlDoesNotEnableIt()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<ISubscriberInfrastructureRouteResolver, DefaultSubscriberInfrastructureRouteResolver>();
+        services.AddRabbitSubscriber<string>("orders.created", (_, _) => Task.CompletedTask);
+        using var provider = services.BuildServiceProvider();
+
+        var validator = new RuntimeTopologyYamlContractValidator(
+            provider.GetServices<IRabbitSubscriberRegistration>(),
+            provider.GetRequiredService<ISubscriberInfrastructureRouteResolver>(),
+            provider,
+            Options.Create(new SphereRabbitMqOptions { VirtualHost = "sales" }));
+
+        var definition = new TopologyDefinition(
+            [
+                new VirtualHostDefinition(
+                    "sales",
+                    queues:
+                    [
+                        new QueueDefinition("orders.created"),
+                    ]),
+            ]);
+
+        var exception = Assert.Throws<InvalidOperationException>(() => validator.Validate(definition));
+
+        Assert.Contains("does not enable dead-letter", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validate_DoesNotThrow_WhenGeneratedDeadLetterMatchesRuntimeConvention()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<ISubscriberInfrastructureRouteResolver, DefaultSubscriberInfrastructureRouteResolver>();
+        services.AddRabbitSubscriber<string>("orders.created", (_, _) => Task.CompletedTask);
+        using var provider = services.BuildServiceProvider();
+
+        var validator = new RuntimeTopologyYamlContractValidator(
+            provider.GetServices<IRabbitSubscriberRegistration>(),
+            provider.GetRequiredService<ISubscriberInfrastructureRouteResolver>(),
+            provider,
+            Options.Create(new SphereRabbitMqOptions { VirtualHost = "sales" }));
+
+        var definition = new TopologyDefinition(
+            [
+                new VirtualHostDefinition(
+                    "sales",
+                    queues:
+                    [
+                        new QueueDefinition(
+                            "orders.created",
+                            deadLetter: new DeadLetterDefinition(enabled: true)),
+                    ]),
+            ]);
+
+        validator.Validate(definition);
     }
 }

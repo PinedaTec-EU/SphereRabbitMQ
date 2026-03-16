@@ -11,6 +11,12 @@ public sealed record RabbitMqTopologyInitializationOptions
     public bool Enabled { get; set; } = true;
 
     /// <summary>
+    /// Validates that runtime subscriber error-handling expectations match the YAML topology contract.
+    /// This validation is read-only and can run even when startup topology application is disabled.
+    /// </summary>
+    public bool ValidateRuntimeContractAgainstYaml { get; set; }
+
+    /// <summary>
     /// Relative or absolute path to the topology YAML file.
     /// </summary>
     public string? YamlFilePath { get; set; }
