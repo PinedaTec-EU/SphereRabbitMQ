@@ -674,12 +674,12 @@ public sealed class TopologyNormalizationServiceTests
             [
                 new VirtualHostDocument
                 {
-                    Name = "travelagent",
+                    Name = "sales",
                     Exchanges =
                     [
                         new ExchangeDocument
                         {
-                            Name = "suite.events",
+                            Name = "sales",
                             Type = "topic",
                             DebugQueue = true,
                         },
@@ -688,7 +688,7 @@ public sealed class TopologyNormalizationServiceTests
                     [
                         new QueueDocument
                         {
-                            Name = "tiers.events",
+                            Name = "orders.events",
                             Type = "quorum",
                             DebugQueue = true,
                             DeadLetter = new DeadLetterDocument
@@ -698,74 +698,19 @@ public sealed class TopologyNormalizationServiceTests
                         },
                         new QueueDocument
                         {
-                            Name = "features.events",
+                            Name = "system.events",
                             Type = "quorum",
-                            DebugQueue = true,
+                            DebugQueue = false,
                             DeadLetter = new DeadLetterDocument
                             {
                                 Enabled = true,
                             },
-                        },
-                        new QueueDocument
-                        {
-                            Name = "campaigns.events",
-                            Type = "quorum",
-                            DebugQueue = true,
-                            DeadLetter = new DeadLetterDocument
-                            {
-                                Enabled = true,
-                            },
-                        },
-                        new QueueDocument
-                        {
-                            Name = "subscriptions.events",
-                            Type = "quorum",
-                            DebugQueue = true,
-                            DeadLetter = new DeadLetterDocument
-                            {
-                                Enabled = true,
-                            },
-                        },
-                        new QueueDocument
-                        {
-                            Name = "tenants.events",
-                            Type = "quorum",
-                            DebugQueue = true,
-                            DeadLetter = new DeadLetterDocument
-                            {
-                                Enabled = true,
-                            },
-                        },
-                        new QueueDocument
-                        {
-                            Name = "fares.events",
-                            Type = "quorum",
-                            DebugQueue = true,
-                            DeadLetter = new DeadLetterDocument
-                            {
-                                Enabled = true,
-                            },
-                        },
-                        new QueueDocument
-                        {
-                            Name = "referrals.events",
-                            Type = "quorum",
-                            DebugQueue = true,
-                            DeadLetter = new DeadLetterDocument
-                            {
-                                Enabled = true,
-                            },
-                        },
+                        }
                     ],
                     Bindings =
                     [
-                        CreateBinding("suite.events", "tiers.events", "tiers.*"),
-                        CreateBinding("suite.events", "features.events", "features.*"),
-                        CreateBinding("suite.events", "campaigns.events", "campaigns.*"),
-                        CreateBinding("suite.events", "subscriptions.events", "subscriptions.*"),
-                        CreateBinding("suite.events", "tenants.events", "tenants.*"),
-                        CreateBinding("suite.events", "fares.events", "fares.*"),
-                        CreateBinding("suite.events", "referrals.events", "referrals.*"),
+                        CreateBinding("sales.events", "orders.events", "orders.*"),
+                        CreateBinding("sales.events", "system.events", "system.*"),
                     ],
                 },
             ],
@@ -781,21 +726,15 @@ public sealed class TopologyNormalizationServiceTests
 
         Assert.Equal(
             [
-                "campaigns.events.debug",
-                "fares.events.debug",
-                "features.events.debug",
-                "referrals.events.debug",
-                "subscriptions.events.debug",
-                "suite.events.debug",
-                "tenants.events.debug",
-                "tiers.events.debug",
+                "orders.events.debug",
+                "sales.debug"
             ],
             debugQueues);
 
         Assert.DoesNotContain(debugQueues, queue => queue.EndsWith(".dlx.debug", StringComparison.Ordinal));
         Assert.DoesNotContain(debugQueues, queue => queue.EndsWith(".dlq.debug", StringComparison.Ordinal));
-        Assert.Contains(virtualHost.Queues, queue => queue.Name == "campaigns.events.dlq");
-        Assert.Contains(virtualHost.Queues, queue => queue.Name == "tiers.events.dlq");
+        Assert.Contains(virtualHost.Queues, queue => queue.Name == "orders.events.dlq");
+        Assert.Contains(virtualHost.Queues, queue => queue.Name == "system.events.dlq");
     }
 
     [Fact]
