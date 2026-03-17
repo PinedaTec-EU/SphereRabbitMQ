@@ -153,6 +153,10 @@
                 "queueSuffix": {
                     "type": "string",
                     "default": "debug"
+                },
+                "ttl": {
+                    "type": "string",
+                    "description": "Optional TimeSpan applied globally to generated debug queues and mapped to x-message-ttl."
                 }
             }
         },

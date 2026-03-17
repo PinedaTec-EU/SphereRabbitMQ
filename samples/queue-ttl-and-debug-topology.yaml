@@ -8,6 +8,7 @@ broker:
 
 debugQueues:
   enabled: true
+  ttl: "00:30:00"
 
 metadata:
   owner: platform

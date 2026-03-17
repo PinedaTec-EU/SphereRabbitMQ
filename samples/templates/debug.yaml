@@ -1,6 +1,7 @@
 # yaml-language-server: $schema=../topology.schema.json
 debugQueues:
   enabled: true
+  ttl: "00:30:00"
 
 virtualHosts:
   - name: sales

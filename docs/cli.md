@@ -372,6 +372,7 @@ The optional `debugQueues` block enables debug queue generation. Each exchange o
 debugQueues:
   enabled: true
   queueSuffix: debug
+  ttl: "00:30:00"
 virtualHosts:
   - name: sales
     exchanges:
@@ -386,6 +387,7 @@ Rules:
 
 - `debugQueues.enabled` must be `true` to generate any debug queues.
 - `debugQueues.queueSuffix` defaults to `debug`.
+- `debugQueues.ttl` is optional, applies globally to every generated debug queue, and maps to `x-message-ttl`.
 - `virtualHosts[].exchanges[].debugQueue: true` generates a debug queue bound to that exchange.
 - `virtualHosts[].queues[].debugQueue: true` generates a debug queue that mirrors the queue incoming bindings.
 - Generated retry/dead-letter artifacts are not selected automatically. If you declare one explicitly and want a debug queue for it, set its own `debugQueue: true`.
@@ -396,6 +398,7 @@ Debug queue conventions are deterministic:
 - queue debug queue name: `<queue>.<queueSuffix>`
 - queue type: `classic`
 - queue durable: `true`
+- queue TTL: inherited from `debugQueues.ttl` when declared
 - exchange debug binding routing key: `#`
 - queue debug bindings reuse each selected queue incoming binding routing key
 
