@@ -1,4 +1,4 @@
-# CLAUDE
+# CODEX
 
 Para trabajar en este repositorio:
 
@@ -6,5 +6,3 @@ Para trabajar en este repositorio:
 2. Lee `../ai-skills-shared/AGENTS.md`.
 
 Mantén este archivo como puente. La fuente canónica vive en `../ai-skills-shared/AGENTS.md`.
-
-Delega en subagentes para las tareas individuales y secundarias, y no contaminar el contexto principal
