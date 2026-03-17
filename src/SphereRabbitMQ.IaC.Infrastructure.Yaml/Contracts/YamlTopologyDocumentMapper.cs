@@ -34,6 +34,7 @@ public static class YamlTopologyDocumentMapper
                 {
                     Enabled = yamlDocument.DebugQueues.Enabled,
                     QueueSuffix = yamlDocument.DebugQueues.QueueSuffix,
+                    Ttl = yamlDocument.DebugQueues.Ttl,
                 },
             Metadata = new Dictionary<string, string>(yamlDocument.Metadata, StringComparer.Ordinal),
             Naming = yamlDocument.Naming is null

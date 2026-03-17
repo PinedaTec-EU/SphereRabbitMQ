@@ -64,13 +64,15 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
 
         AppendDebugArtifacts(
             debugQueues,
+            document.Name,
             document.Exchanges,
             explicitExchanges,
             document.Queues,
             explicitQueues,
             explicitBindings.Concat(generatedBindings),
             generatedQueues,
-            generatedBindings);
+            generatedBindings,
+            issues);
 
         return new VirtualHostDefinition(
             document.Name.Trim(),
@@ -248,18 +250,22 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
 
     private static void AppendDebugArtifacts(
         DebugQueuesDocument? debugQueues,
+        string virtualHostName,
         IReadOnlyList<ExchangeDocument> exchangeDocuments,
         IReadOnlyList<ExchangeDefinition> explicitExchanges,
         IReadOnlyList<QueueDocument> queueDocuments,
         IReadOnlyList<QueueDefinition> explicitQueues,
         IEnumerable<BindingDefinition> existingBindings,
         ICollection<QueueDefinition> generatedQueues,
-        ICollection<BindingDefinition> generatedBindings)
+        ICollection<BindingDefinition> generatedBindings,
+        ICollection<TopologyIssue> issues)
     {
         if (debugQueues is not { Enabled: true })
         {
             return;
         }
+
+        var debugQueueTtl = NormalizeDebugQueueTtl(virtualHostName, debugQueues.Ttl, issues);
 
         var selectedExchanges = exchangeDocuments
             .Where(exchange => exchange.DebugQueue)
@@ -296,7 +302,7 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
             var debugQueueName = $"{exchange.Name}.{debugQueues.QueueSuffix}";
             if (generatedQueuesByName.Add(debugQueueName))
             {
-                generatedQueues.Add(CreateGeneratedDebugQueueForExchange(debugQueueName, exchange.Name));
+                generatedQueues.Add(CreateGeneratedDebugQueueForExchange(debugQueueName, exchange.Name, debugQueueTtl));
             }
 
             var debugBinding = CreateGeneratedDebugBindingForExchange(exchange.Name, debugQueueName);
@@ -323,7 +329,7 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
             var debugQueueName = $"{queue.Name}.{debugQueues.QueueSuffix}";
             if (generatedQueuesByName.Add(debugQueueName))
             {
-                generatedQueues.Add(CreateGeneratedDebugQueueForQueue(debugQueueName, queue.Name));
+                generatedQueues.Add(CreateGeneratedDebugQueueForQueue(debugQueueName, queue.Name, debugQueueTtl));
             }
 
             foreach (var queueBinding in queueBindings)
@@ -377,10 +383,12 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
 
     private static QueueDefinition CreateGeneratedDebugQueueForExchange(
         string queueName,
-        string sourceExchangeName)
+        string sourceExchangeName,
+        TimeSpan? ttl)
     {
         var arguments = new Dictionary<string, object?>(StringComparer.Ordinal);
         EnsureQueueTypeArgument(QueueType.Classic, arguments);
+        ApplyGeneratedQueueTtl(arguments, ttl);
 
         return new QueueDefinition(
             queueName,
@@ -396,10 +404,12 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
 
     private static QueueDefinition CreateGeneratedDebugQueueForQueue(
         string queueName,
-        string sourceQueueName)
+        string sourceQueueName,
+        TimeSpan? ttl)
     {
         var arguments = new Dictionary<string, object?>(StringComparer.Ordinal);
         EnsureQueueTypeArgument(QueueType.Classic, arguments);
+        ApplyGeneratedQueueTtl(arguments, ttl);
 
         return new QueueDefinition(
             queueName,
@@ -528,6 +538,41 @@ public sealed class TopologyNormalizationService : ITopologyNormalizer
         }
 
         return parsedTtl;
+    }
+
+    private static TimeSpan? NormalizeDebugQueueTtl(
+        string virtualHostName,
+        string? ttl,
+        ICollection<TopologyIssue> issues)
+    {
+        if (string.IsNullOrWhiteSpace(ttl))
+        {
+            return null;
+        }
+
+        var path = $"/virtualHosts/{virtualHostName}/debugQueues/ttl";
+        if (TimeSpan.TryParse(ttl, out var parsedTtl) && parsedTtl > TimeSpan.Zero)
+        {
+            return parsedTtl;
+        }
+
+        issues.Add(new TopologyIssue(
+            "invalid-debug-queue-ttl",
+            $"Debug queue ttl '{ttl}' is invalid. Use a positive TimeSpan value.",
+            path,
+            TopologyIssueSeverity.Error));
+
+        return null;
+    }
+
+    private static void ApplyGeneratedQueueTtl(IDictionary<string, object?> arguments, TimeSpan? ttl)
+    {
+        if (ttl is null)
+        {
+            return;
+        }
+
+        arguments[TopologyNormalizationConsts.MessageTtlArgument] = Convert.ToInt64(ttl.Value.TotalMilliseconds);
     }
 
     private static TimeSpan? NormalizeDeadLetterTtl(

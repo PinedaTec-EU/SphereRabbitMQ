@@ -1,6 +1,9 @@
 using SphereRabbitMQ.IaC.Application.Apply;
+using SphereRabbitMQ.IaC.Application.Models;
+using SphereRabbitMQ.IaC.Application.Normalization;
 using SphereRabbitMQ.IaC.Domain.Topology;
 using SphereRabbitMQ.IaC.Infrastructure.RabbitMQ.Apply;
+using System.Text.Json;
 
 namespace SphereRabbitMQ.IaC.Tests.Integration;
 
@@ -455,6 +458,67 @@ public sealed class RabbitMqManagementRoundTripIntegrationTests
     }
 
     [RabbitMqConfiguredFact]
+    public async Task Apply_CreatesDebugQueuesWithGlobalTtlAsync()
+    {
+        await _fixture.ResetVirtualHostAsync();
+
+        var topologyDocument = new TopologyDocument
+        {
+            DebugQueues = new DebugQueuesDocument
+            {
+                Enabled = true,
+                Ttl = "00:02:00",
+            },
+            VirtualHosts =
+            [
+                new VirtualHostDocument
+                {
+                    Name = _fixture.VirtualHostName,
+                    Exchanges =
+                    [
+                        new ExchangeDocument
+                        {
+                            Name = "orders",
+                            Type = "topic",
+                            DebugQueue = true,
+                        },
+                    ],
+                    Queues =
+                    [
+                        new QueueDocument
+                        {
+                            Name = "orders.created",
+                            Type = "quorum",
+                            DebugQueue = true,
+                        },
+                    ],
+                    Bindings =
+                    [
+                        new BindingDocument
+                        {
+                            SourceExchange = "orders",
+                            Destination = "orders.created",
+                            DestinationType = "queue",
+                            RoutingKey = "orders.created",
+                        },
+                    ],
+                },
+            ],
+        };
+
+        var desiredTopology = await new TopologyNormalizationService().NormalizeAsync(topologyDocument);
+        var topologyPlan = await _fixture.TopologyPlanner.PlanAsync(desiredTopology, new TopologyDefinition([]));
+
+        await _fixture.TopologyApplier.ApplyAsync(desiredTopology, topologyPlan);
+
+        var actualTopology = await _fixture.BrokerTopologyReader.ReadAsync();
+        var virtualHost = actualTopology.VirtualHosts.Single();
+
+        Assert.Contains(virtualHost.Queues, queue => queue.Name == "orders.debug" && HasMessageTtl(queue, 120000L));
+        Assert.Contains(virtualHost.Queues, queue => queue.Name == "orders.created.debug" && HasMessageTtl(queue, 120000L));
+    }
+
+    [RabbitMqConfiguredFact]
     public async Task Apply_WithMigrate_MainstreamQueueMovesExistingMessagesAsync()
     {
         await _fixture.ResetVirtualHostAsync();
@@ -745,6 +809,32 @@ public sealed class RabbitMqManagementRoundTripIntegrationTests
         Assert.Contains(virtualHost.Queues, queue => queue.Name == "orders.created.eu" && queue.Type == QueueType.Quorum);
         Assert.Contains(virtualHost.Queues, queue => queue.Name == "orders.created.us" && queue.Type == QueueType.Quorum);
         Assert.Null(await _fixture.ApiClient.GetQueueAsync(_fixture.VirtualHostName, "sprmq.migration.lock"));
+    }
+
+    private static bool HasMessageTtl(QueueDefinition queue, long expectedTtl)
+        => queue.Arguments.TryGetValue("x-message-ttl", out var ttlValue) &&
+           TryConvertToInt64(ttlValue, out var ttl) &&
+           ttl == expectedTtl;
+
+    private static bool TryConvertToInt64(object? value, out long converted)
+    {
+        switch (value)
+        {
+            case null:
+                converted = 0;
+                return false;
+            case long longValue:
+                converted = longValue;
+                return true;
+            case int intValue:
+                converted = intValue;
+                return true;
+            case JsonElement jsonElement when jsonElement.ValueKind == JsonValueKind.Number && jsonElement.TryGetInt64(out var jsonLongValue):
+                converted = jsonLongValue;
+                return true;
+            default:
+                return long.TryParse(value.ToString(), out converted);
+        }
     }
 
     private sealed class BlockingQueueMigrationMessageMover : IQueueMigrationMessageMover

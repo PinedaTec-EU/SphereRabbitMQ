@@ -34,6 +34,7 @@ public sealed class TopologyYamlDocumentWriterTests
             {
                 Enabled = true,
                 QueueSuffix = "dbg",
+                Ttl = "00:02:00",
             },
             Metadata = new Dictionary<string, string>(StringComparer.Ordinal)
             {
@@ -152,6 +153,7 @@ public sealed class TopologyYamlDocumentWriterTests
         Assert.Contains("orders.legacy", yaml, StringComparison.Ordinal);
         Assert.Contains("debugQueues:", yaml, StringComparison.Ordinal);
         Assert.Contains("queueSuffix: dbg", yaml, StringComparison.Ordinal);
+        Assert.Contains("ttl: 00:02:00", yaml, StringComparison.Ordinal);
         Assert.Contains("naming:", yaml, StringComparison.Ordinal);
         Assert.Contains("retryExchangeSuffix: retry", yaml, StringComparison.Ordinal);
         Assert.Contains("deadLetterExchangeSuffix: dlx", yaml, StringComparison.Ordinal);

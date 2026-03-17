@@ -819,6 +819,57 @@ public sealed class TopologyNormalizationServiceTests
     }
 
     [Fact]
+    public async Task NormalizeAsync_AppliesGlobalTtl_ToGeneratedDebugQueues()
+    {
+        ITopologyNormalizer topologyNormalizer = new TopologyNormalizationService();
+        var topologyDocument = new TopologyDocument
+        {
+            DebugQueues = new DebugQueuesDocument
+            {
+                Enabled = true,
+                Ttl = "00:02:00",
+            },
+            VirtualHosts =
+            [
+                new VirtualHostDocument
+                {
+                    Name = "sales",
+                    Exchanges =
+                    [
+                        new ExchangeDocument
+                        {
+                            Name = "orders.events",
+                            Type = "topic",
+                            DebugQueue = true,
+                        },
+                    ],
+                    Queues =
+                    [
+                        new QueueDocument
+                        {
+                            Name = "orders.created",
+                            Type = "quorum",
+                            DebugQueue = true,
+                        },
+                    ],
+                    Bindings =
+                    [
+                        CreateBinding("orders.events", "orders.created", "orders.created"),
+                    ],
+                },
+            ],
+        };
+
+        var topologyDefinition = await topologyNormalizer.NormalizeAsync(topologyDocument);
+        var virtualHost = topologyDefinition.VirtualHosts.Single();
+
+        Assert.Collection(
+            virtualHost.Queues.Where(queue => queue.Name.EndsWith(".debug", StringComparison.Ordinal)).OrderBy(queue => queue.Name, StringComparer.Ordinal),
+            exchangeQueue => Assert.Equal(120000L, exchangeQueue.Arguments["x-message-ttl"]),
+            queueQueue => Assert.Equal(120000L, queueQueue.Arguments["x-message-ttl"]));
+    }
+
+    [Fact]
     public async Task NormalizeAsync_Throws_WhenDeadLetterQueueTargetOmitsQueueName()
     {
         ITopologyNormalizer topologyNormalizer = new TopologyNormalizationService();

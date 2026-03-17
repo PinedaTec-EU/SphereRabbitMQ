@@ -133,6 +133,7 @@ public sealed class TopologyYamlParser : ITopologyParser
             : document with
             {
                 QueueSuffix = Resolve(document.QueueSuffix, variables),
+                Ttl = ResolveOptional(document.Ttl, variables),
             };
 
     private BindingYamlDocument ResolveBinding(

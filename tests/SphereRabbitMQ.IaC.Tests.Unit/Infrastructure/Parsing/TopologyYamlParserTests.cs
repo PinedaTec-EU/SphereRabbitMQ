@@ -35,6 +35,7 @@ public sealed class TopologyYamlParserTests
         debugQueues:
           enabled: true
           queueSuffix: dbg
+          ttl: "00:02:00"
         virtualHosts:
           - name: ${VHOST_NAME}
             exchanges:
@@ -59,6 +60,7 @@ public sealed class TopologyYamlParserTests
     Assert.NotNull(topologyDocument.DebugQueues);
     Assert.True(topologyDocument.DebugQueues!.Enabled);
     Assert.Equal("dbg", topologyDocument.DebugQueues.QueueSuffix);
+    Assert.Equal("00:02:00", topologyDocument.DebugQueues.Ttl);
     Assert.Equal("topic", topologyDocument.VirtualHosts.Single().Exchanges.Single().Type);
     Assert.True(topologyDocument.VirtualHosts.Single().Exchanges.Single().DebugQueue);
     Assert.Equal("00:05:00", topologyDocument.VirtualHosts.Single().Queues.Single().Ttl);

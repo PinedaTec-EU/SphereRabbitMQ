@@ -8,4 +8,6 @@ public sealed record DebugQueuesYamlDocument
     public bool Enabled { get; init; }
 
     public string QueueSuffix { get; init; } = "debug";
+
+    public string? Ttl { get; init; }
 }

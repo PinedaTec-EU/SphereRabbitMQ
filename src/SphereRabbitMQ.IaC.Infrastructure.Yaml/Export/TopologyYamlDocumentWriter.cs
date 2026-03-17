@@ -54,6 +54,7 @@ public sealed class TopologyYamlDocumentWriter : ITopologyDocumentWriter
                 {
                     Enabled = document.DebugQueues.Enabled,
                     QueueSuffix = document.DebugQueues.QueueSuffix,
+                    Ttl = document.DebugQueues.Ttl,
                 },
             Metadata = new Dictionary<string, string>(document.Metadata, StringComparer.Ordinal),
             Naming = document.Naming is null
