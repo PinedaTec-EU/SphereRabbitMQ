@@ -661,6 +661,225 @@ public sealed class TopologyNormalizationServiceTests
     }
 
     [Fact]
+    public async Task NormalizeAsync_GeneratesOnlyExpectedDebugQueues_ForSuiteEventsStyleTopology()
+    {
+        ITopologyNormalizer topologyNormalizer = new TopologyNormalizationService();
+        var topologyDocument = new TopologyDocument
+        {
+            DebugQueues = new DebugQueuesDocument
+            {
+                Enabled = true,
+            },
+            VirtualHosts =
+            [
+                new VirtualHostDocument
+                {
+                    Name = "travelagent",
+                    Exchanges =
+                    [
+                        new ExchangeDocument
+                        {
+                            Name = "suite.events",
+                            Type = "topic",
+                            DebugQueue = true,
+                        },
+                    ],
+                    Queues =
+                    [
+                        new QueueDocument
+                        {
+                            Name = "tiers.events",
+                            Type = "quorum",
+                            DebugQueue = true,
+                            DeadLetter = new DeadLetterDocument
+                            {
+                                Enabled = true,
+                            },
+                        },
+                        new QueueDocument
+                        {
+                            Name = "features.events",
+                            Type = "quorum",
+                            DebugQueue = true,
+                            DeadLetter = new DeadLetterDocument
+                            {
+                                Enabled = true,
+                            },
+                        },
+                        new QueueDocument
+                        {
+                            Name = "campaigns.events",
+                            Type = "quorum",
+                            DebugQueue = true,
+                            DeadLetter = new DeadLetterDocument
+                            {
+                                Enabled = true,
+                            },
+                        },
+                        new QueueDocument
+                        {
+                            Name = "subscriptions.events",
+                            Type = "quorum",
+                            DebugQueue = true,
+                            DeadLetter = new DeadLetterDocument
+                            {
+                                Enabled = true,
+                            },
+                        },
+                        new QueueDocument
+                        {
+                            Name = "tenants.events",
+                            Type = "quorum",
+                            DebugQueue = true,
+                            DeadLetter = new DeadLetterDocument
+                            {
+                                Enabled = true,
+                            },
+                        },
+                        new QueueDocument
+                        {
+                            Name = "fares.events",
+                            Type = "quorum",
+                            DebugQueue = true,
+                            DeadLetter = new DeadLetterDocument
+                            {
+                                Enabled = true,
+                            },
+                        },
+                        new QueueDocument
+                        {
+                            Name = "referrals.events",
+                            Type = "quorum",
+                            DebugQueue = true,
+                            DeadLetter = new DeadLetterDocument
+                            {
+                                Enabled = true,
+                            },
+                        },
+                    ],
+                    Bindings =
+                    [
+                        CreateBinding("suite.events", "tiers.events", "tiers.*"),
+                        CreateBinding("suite.events", "features.events", "features.*"),
+                        CreateBinding("suite.events", "campaigns.events", "campaigns.*"),
+                        CreateBinding("suite.events", "subscriptions.events", "subscriptions.*"),
+                        CreateBinding("suite.events", "tenants.events", "tenants.*"),
+                        CreateBinding("suite.events", "fares.events", "fares.*"),
+                        CreateBinding("suite.events", "referrals.events", "referrals.*"),
+                    ],
+                },
+            ],
+        };
+
+        var topologyDefinition = await topologyNormalizer.NormalizeAsync(topologyDocument);
+        var virtualHost = topologyDefinition.VirtualHosts.Single();
+        var debugQueues = virtualHost.Queues
+            .Where(queue => queue.Name.EndsWith(".debug", StringComparison.Ordinal))
+            .Select(queue => queue.Name)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Equal(
+            [
+                "campaigns.events.debug",
+                "fares.events.debug",
+                "features.events.debug",
+                "referrals.events.debug",
+                "subscriptions.events.debug",
+                "suite.events.debug",
+                "tenants.events.debug",
+                "tiers.events.debug",
+            ],
+            debugQueues);
+
+        Assert.DoesNotContain(debugQueues, queue => queue.EndsWith(".dlx.debug", StringComparison.Ordinal));
+        Assert.DoesNotContain(debugQueues, queue => queue.EndsWith(".dlq.debug", StringComparison.Ordinal));
+        Assert.Contains(virtualHost.Queues, queue => queue.Name == "campaigns.events.dlq");
+        Assert.Contains(virtualHost.Queues, queue => queue.Name == "tiers.events.dlq");
+    }
+
+    [Fact]
+    public async Task NormalizeAsync_DoesNotGenerateDebugQueues_ForGeneratedRetryAndDeadLetterArtifacts()
+    {
+        ITopologyNormalizer topologyNormalizer = new TopologyNormalizationService();
+        var topologyDocument = new TopologyDocument
+        {
+            DebugQueues = new DebugQueuesDocument
+            {
+                Enabled = true,
+            },
+            VirtualHosts =
+            [
+                new VirtualHostDocument
+                {
+                    Name = "sales",
+                    Exchanges =
+                    [
+                        new ExchangeDocument
+                        {
+                            Name = "orders.events",
+                            Type = "topic",
+                            DebugQueue = true,
+                        },
+                    ],
+                    Queues =
+                    [
+                        new QueueDocument
+                        {
+                            Name = "orders.events",
+                            Type = "quorum",
+                            DebugQueue = true,
+                            Retry = new RetryDocument
+                            {
+                                Enabled = true,
+                                Steps =
+                                [
+                                    new RetryStepDocument
+                                    {
+                                        Name = "fast",
+                                        Delay = "00:00:30",
+                                    },
+                                ],
+                            },
+                            DeadLetter = new DeadLetterDocument
+                            {
+                                Enabled = true,
+                            },
+                        },
+                    ],
+                    Bindings =
+                    [
+                        CreateBinding("orders.events", "orders.events", "orders.*"),
+                    ],
+                },
+            ],
+        };
+
+        var topologyDefinition = await topologyNormalizer.NormalizeAsync(topologyDocument);
+        var virtualHost = topologyDefinition.VirtualHosts.Single();
+        var debugQueues = virtualHost.Queues
+            .Where(queue => queue.Name.EndsWith(".debug", StringComparison.Ordinal))
+            .Select(queue => queue.Name)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Equal(
+            [
+                "orders.events.debug",
+            ],
+            debugQueues);
+
+        Assert.Contains(virtualHost.Exchanges, exchange => exchange.Name == "orders.events.retry");
+        Assert.Contains(virtualHost.Exchanges, exchange => exchange.Name == "orders.events.dlx");
+        Assert.Contains(virtualHost.Queues, queue => queue.Name == "orders.events.retry.fast");
+        Assert.Contains(virtualHost.Queues, queue => queue.Name == "orders.events.dlq");
+        Assert.DoesNotContain(debugQueues, queue => queue == "orders.events.retry.debug");
+        Assert.DoesNotContain(debugQueues, queue => queue == "orders.events.dlx.debug");
+        Assert.DoesNotContain(debugQueues, queue => queue == "orders.events.retry.fast.debug");
+        Assert.DoesNotContain(debugQueues, queue => queue == "orders.events.dlq.debug");
+    }
+
+    [Fact]
     public async Task NormalizeAsync_Throws_WhenDeadLetterQueueTargetOmitsQueueName()
     {
         ITopologyNormalizer topologyNormalizer = new TopologyNormalizationService();
@@ -691,6 +910,18 @@ public sealed class TopologyNormalizationServiceTests
 
         Assert.Contains(exception.Issues, issue => issue.Code == "dead-letter-queue-target-required");
     }
+
+    private static BindingDocument CreateBinding(
+        string sourceExchange,
+        string destinationQueue,
+        string routingKey)
+        => new()
+        {
+            SourceExchange = sourceExchange,
+            Destination = destinationQueue,
+            DestinationType = "queue",
+            RoutingKey = routingKey,
+        };
 
     [Fact]
     public async Task NormalizeAsync_Throws_WhenGeneratedDeadLetterDeclaresRoutingKey()
