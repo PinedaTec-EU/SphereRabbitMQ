@@ -68,6 +68,7 @@ internal sealed class RabbitMqPublisher : IRabbitMQPublisher
             Timestamp = new AmqpTimestamp((options.Timestamp ?? DateTimeOffset.UtcNow).ToUnixTimeSeconds()),
             Headers = new Dictionary<string, object?>(options.Headers, StringComparer.Ordinal),
             Expiration = options.TimeToLive is null ? null : FormatExpiration(options.TimeToLive.Value),
+            Priority = options.Priority ?? 0,
         };
         ReadOnlyMemory<byte> body;
 
