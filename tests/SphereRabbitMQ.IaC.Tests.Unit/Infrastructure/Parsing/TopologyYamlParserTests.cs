@@ -124,6 +124,38 @@ public sealed class TopologyYamlParserTests
   }
 
   [Fact]
+  public async Task ParseAsync_MapsXMaxPriorityArgument_WhenPresent_AndOmitsItWhenAbsent()
+  {
+    var variableResolverMock = new Mock<IVariableResolver>(MockBehavior.Strict);
+    variableResolverMock
+      .Setup(resolver => resolver.Resolve(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string?>>(), true))
+      .Returns<string, IReadOnlyDictionary<string, string?>, bool>((value, variables, _) =>
+        variables.Aggregate(value, (current, variable) => current.Replace($"${{{variable.Key}}}", variable.Value ?? string.Empty, StringComparison.Ordinal)));
+
+    ITopologyParser topologyParser = new TopologyYamlParser(variableResolverMock.Object);
+    var yaml = """
+        virtualHosts:
+          - name: sales
+            queues:
+              - name: orders.priority
+                arguments:
+                  x-max-priority: 10
+              - name: orders.standard
+        """;
+
+    await using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(yaml));
+    var topologyDocument = await topologyParser.ParseAsync(stream);
+
+    var virtualHost = Assert.Single(topologyDocument.VirtualHosts);
+    var priorityQueue = Assert.Single(virtualHost.Queues, queue => queue.Name == "orders.priority");
+    var standardQueue = Assert.Single(virtualHost.Queues, queue => queue.Name == "orders.standard");
+
+    Assert.True(priorityQueue.Arguments.TryGetValue("x-max-priority", out var xMaxPriority));
+    Assert.Equal(10, Assert.IsType<int>(xMaxPriority));
+    Assert.DoesNotContain("x-max-priority", standardQueue.Arguments.Keys);
+  }
+
+  [Fact]
   public async Task ParseAsync_MapsDecommissionSection_AndResolvesVariables()
   {
     var variableResolverMock = new Mock<IVariableResolver>(MockBehavior.Strict);

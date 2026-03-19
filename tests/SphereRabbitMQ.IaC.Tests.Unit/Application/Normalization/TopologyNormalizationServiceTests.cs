@@ -186,6 +186,46 @@ public sealed class TopologyNormalizationServiceTests
     }
 
     [Fact]
+    public async Task NormalizeAsync_PreservesXMaxPriorityArgument_WhenPresent_AndOmitsItWhenAbsent()
+    {
+        ITopologyNormalizer topologyNormalizer = new TopologyNormalizationService();
+        var topologyDocument = new TopologyDocument
+        {
+            VirtualHosts =
+            [
+                new VirtualHostDocument
+                {
+                    Name = "sales",
+                    Queues =
+                    [
+                        new QueueDocument
+                        {
+                            Name = "orders.priority",
+                            Arguments = new Dictionary<string, object?>(StringComparer.Ordinal)
+                            {
+                                ["x-max-priority"] = 10,
+                            },
+                        },
+                        new QueueDocument
+                        {
+                            Name = "orders.standard",
+                        },
+                    ],
+                },
+            ],
+        };
+
+        var topologyDefinition = await topologyNormalizer.NormalizeAsync(topologyDocument);
+        var virtualHost = Assert.Single(topologyDefinition.VirtualHosts);
+        var priorityQueue = Assert.Single(virtualHost.Queues, queue => queue.Name == "orders.priority");
+        var standardQueue = Assert.Single(virtualHost.Queues, queue => queue.Name == "orders.standard");
+
+        Assert.True(priorityQueue.Arguments.TryGetValue("x-max-priority", out var xMaxPriority));
+        Assert.Equal(10, Assert.IsType<int>(xMaxPriority));
+        Assert.DoesNotContain("x-max-priority", standardQueue.Arguments.Keys);
+    }
+
+    [Fact]
     public async Task NormalizeAsync_UsesDefaultNamingPolicy_WhenNamingBlockIsOmitted()
     {
         ITopologyNormalizer topologyNormalizer = new TopologyNormalizationService();

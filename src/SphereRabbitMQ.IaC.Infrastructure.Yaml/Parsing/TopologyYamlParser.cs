@@ -2,6 +2,7 @@ using SphereRabbitMQ.IaC.Application.Models;
 using SphereRabbitMQ.IaC.Application.Parsing.Interfaces;
 using SphereRabbitMQ.IaC.Application.Variables.Interfaces;
 using SphereRabbitMQ.IaC.Infrastructure.Yaml.Contracts;
+using System.Globalization;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
@@ -222,9 +223,39 @@ public sealed class TopologyYamlParser : ITopologyParser
         => value switch
         {
             null => null,
-            string stringValue => Resolve(stringValue, variables),
+            string stringValue => CoerceScalarValue(Resolve(stringValue, variables)),
             _ => value,
         };
+
+    private static object? CoerceScalarValue(string value)
+    {
+        if (string.Equals(value, "null", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        if (bool.TryParse(value, out var booleanValue))
+        {
+            return booleanValue;
+        }
+
+        if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var intValue))
+        {
+            return intValue;
+        }
+
+        if (long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var longValue))
+        {
+            return longValue;
+        }
+
+        if (decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out var decimalValue))
+        {
+            return decimalValue;
+        }
+
+        return value;
+    }
 
     private string Resolve(string value, IReadOnlyDictionary<string, string?> variables)
         => _variableResolver.Resolve(value, variables);
