@@ -4,3 +4,5 @@
 **/TestResults/
 **/MCPs/*
 /cli/
+/scripts/local/*
+/.local/*
