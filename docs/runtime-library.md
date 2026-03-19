@@ -22,7 +22,7 @@ If the required broker topology is missing, startup or message processing fails 
 - manage one shared RabbitMQ connection
 - use dedicated channels for subscribers
 - use a dedicated publisher channel strategy safe for confirms
-- publish messages with headers, correlation id, message id, and timestamp
+- publish messages with headers, correlation id, message id, timestamp, ttl, and priority
 - consume messages with bounded concurrency and manual acknowledgements
 - forward retryable failures through broker retry topology
 - forward exhausted failures to dead-letter topology
@@ -96,8 +96,20 @@ var publisher = provider.GetRequiredService<IMessagePublisher<OrderCreated>>();
 
 await publisher.PublishAsync(new OrderCreated("order-42"));
 
+await publisher.PublishAsync(
+    new OrderCreated("order-43"),
+    new PublishOptions
+    {
+        CorrelationId = "sales-checkout-001",
+        Priority = 9,
+        TimeToLive = TimeSpan.FromMinutes(5),
+    });
+
 public sealed record OrderCreated(string OrderId);
 ```
+
+Message priority only has an effect when the destination queue is configured as a RabbitMQ priority queue (`x-max-priority`).
+When `PublishOptions.Priority` is `null` (default), the runtime publishes with AMQP priority `0`.
 
 `IRabbitMQPublisher` remains available as the low-level API for dynamic or infrastructure-heavy scenarios. The recommended application-facing API is `IMessagePublisher<TMessage>`.
 
