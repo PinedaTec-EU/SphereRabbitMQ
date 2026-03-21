@@ -167,6 +167,49 @@ Operational rules:
 
 If `--migrate` is not specified, the CLI keeps the current safe behavior and fails when an incompatible queue or exchange already exists on the broker.
 
+### `purge`
+
+Removes all messages from every queue produced by the normalized topology.
+
+That includes:
+
+- declared queues
+- generated retry queues
+- generated dead-letter queues
+- generated debug queues when `debugQueues` is enabled and the YAML marks artifacts for debug queue generation
+
+Execution rules:
+
+- requires `--allow-destructive` for non-dry execution
+- asks for interactive confirmation before executing
+- use `--auto-approve` to skip the confirmation prompt in automation or CI
+
+Examples:
+
+```bash
+sprmq purge --file samples/minimal-topology.yaml --dry-run
+sprmq purge --file samples/minimal-topology.yaml --allow-destructive
+sprmq purge --file samples/minimal-topology.yaml --allow-destructive --auto-approve
+```
+
+### `destroy`
+
+Deletes the full virtual host for every virtual host declared in the YAML.
+
+Execution rules:
+
+- requires `--allow-destructive` for non-dry execution
+- asks for interactive confirmation before executing
+- use `--auto-approve` to skip the confirmation prompt in automation or CI
+
+Examples:
+
+```bash
+sprmq destroy --file samples/minimal-topology.yaml --dry-run
+sprmq destroy --file samples/minimal-topology.yaml --allow-destructive
+sprmq destroy --file samples/minimal-topology.yaml --allow-destructive --auto-approve
+```
+
 ### Safe Renames And Cleanup
 
 Renaming an exchange or queue is not an in-place update in RabbitMQ. Treat it as a staged migration:
