@@ -19,7 +19,8 @@ internal static class TopologyRootCommandFactory
           init      Create a topology YAML template.
           plan      Compare desired topology with the broker. Never changes broker state.
           apply     Apply only safe reconciliation operations. Refuses destructive changes.
-          destroy   Intentionally delete declared topology resources. Requires --allow-destructive unless used with --dry-run.
+          purge     Remove messages from all queues declared by the topology. Requires confirmation unless --auto-approve is used.
+          destroy   Intentionally delete declared virtual hosts. Requires confirmation unless --auto-approve is used.
           export    Export broker topology to YAML.
           completion  Print shell completion scripts.
 
@@ -27,9 +28,9 @@ internal static class TopologyRootCommandFactory
           sprmq init --template minimal --output-file topology.yaml
           sprmq plan --file samples/minimal-topology.yaml
           sprmq apply --file samples/minimal-topology.yaml --dry-run
+          sprmq purge --file samples/minimal-topology.yaml --dry-run
           sprmq destroy --file samples/minimal-topology.yaml --dry-run
-          sprmq destroy --file samples/minimal-topology.yaml --allow-destructive
-          sprmq destroy --file samples/minimal-topology.yaml --allow-destructive --destroy-vhost
+          sprmq destroy --file samples/minimal-topology.yaml --allow-destructive --auto-approve
           sprmq completion zsh
         """;
     private const string InitDescription = """
@@ -60,15 +61,21 @@ internal static class TopologyRootCommandFactory
           sprmq apply --file samples/minimal-topology.yaml --migrate
         """;
     private const string DestroyDescription = """
-        Intentionally delete topology resources declared in the YAML file.
-        By default, destroy removes only declared resources and generated retry/dead-letter artifacts.
-        Use --destroy-vhost to delete the entire virtual host instead.
-        Non-dry execution requires --allow-destructive.
+        Intentionally delete every virtual host declared in the YAML file.
+        Non-dry execution requires --allow-destructive and asks for confirmation unless --auto-approve is used.
 
         Examples:
           sprmq destroy --file samples/minimal-topology.yaml --dry-run
-          sprmq destroy --file samples/minimal-topology.yaml --allow-destructive
-          sprmq destroy --file samples/minimal-topology.yaml --allow-destructive --destroy-vhost
+          sprmq destroy --file samples/minimal-topology.yaml --allow-destructive --auto-approve
+        """;
+    private const string PurgeDescription = """
+        Remove all messages from every queue declared by the normalized topology.
+        Generated retry, dead-letter, and debug queues are included when present in the YAML.
+        Non-dry execution requires --allow-destructive and asks for confirmation unless --auto-approve is used.
+
+        Examples:
+          sprmq purge --file samples/minimal-topology.yaml --dry-run
+          sprmq purge --file samples/minimal-topology.yaml --allow-destructive --auto-approve
         """;
     private const string ExportDescription = """
         Export broker topology to YAML.
@@ -102,7 +109,7 @@ internal static class TopologyRootCommandFactory
         var migrateOption = new Option<bool>("--migrate", () => false, "Allow supported exchange and queue migrations when immutable broker arguments changed.");
         var verboseOption = new Option<bool>("--verbose", () => false, "Print detailed execution phases and broker operations.");
         var allowDestructiveOption = new Option<bool>("--allow-destructive", () => false, "Allow destructive execution for commands that delete broker resources.");
-        var destroyVirtualHostOption = new Option<bool>("--destroy-vhost", () => false, "Delete the full virtual host instead of only the declared resources.");
+        var autoApproveOption = new Option<bool>("--auto-approve", () => false, "Skip the interactive confirmation prompt for destructive commands.");
         var exportOutputPathOption = new Option<string>("--output-file", () => "-", "Output file path for export. Use '-' to write YAML to stdout.");
         var exportFileOption = new Option<string?>("--file", "Optional topology YAML file used as a source for broker connection settings.");
         var includeBrokerOption = new Option<bool>("--include-broker", () => false, "Include the resolved broker settings in the exported YAML.");
@@ -207,6 +214,10 @@ internal static class TopologyRootCommandFactory
         {
             Description = DestroyDescription,
         };
+        var purgeCommand = new Command("purge")
+        {
+            Description = PurgeDescription,
+        };
         destroyCommand.AddOption(fileOption);
         destroyCommand.AddOption(outputFormatOption);
         destroyCommand.AddOption(managementUrlOption);
@@ -216,7 +227,7 @@ internal static class TopologyRootCommandFactory
         destroyCommand.AddOption(dryRunOption);
         destroyCommand.AddOption(verboseOption);
         destroyCommand.AddOption(allowDestructiveOption);
-        destroyCommand.AddOption(destroyVirtualHostOption);
+        destroyCommand.AddOption(autoApproveOption);
         Handler.SetHandler(destroyCommand, async (InvocationContext context) =>
         {
             var parseResult = context.ParseResult;
@@ -228,7 +239,34 @@ internal static class TopologyRootCommandFactory
                 parseResult.GetValueForOption(dryRunOption),
                 parseResult.GetValueForOption(verboseOption),
                 parseResult.GetValueForOption(allowDestructiveOption),
-                parseResult.GetValueForOption(destroyVirtualHostOption),
+                parseResult.GetValueForOption(autoApproveOption),
+                true,
+                cancellationToken);
+            context.ExitCode = exitCode;
+        });
+
+        purgeCommand.AddOption(fileOption);
+        purgeCommand.AddOption(outputFormatOption);
+        purgeCommand.AddOption(managementUrlOption);
+        purgeCommand.AddOption(usernameOption);
+        purgeCommand.AddOption(passwordOption);
+        purgeCommand.AddOption(virtualHostsOption);
+        purgeCommand.AddOption(dryRunOption);
+        purgeCommand.AddOption(verboseOption);
+        purgeCommand.AddOption(allowDestructiveOption);
+        purgeCommand.AddOption(autoApproveOption);
+        Handler.SetHandler(purgeCommand, async (InvocationContext context) =>
+        {
+            var parseResult = context.ParseResult;
+            var cancellationToken = context.GetCancellationToken();
+            var exitCode = await handler.PurgeAsync(
+                parseResult.GetValueForOption(fileOption)!,
+                CreateBrokerOptions(parseResult, managementUrlOption, usernameOption, passwordOption, virtualHostsOption),
+                parseResult.GetValueForOption(outputFormatOption),
+                parseResult.GetValueForOption(dryRunOption),
+                parseResult.GetValueForOption(verboseOption),
+                parseResult.GetValueForOption(allowDestructiveOption),
+                parseResult.GetValueForOption(autoApproveOption),
                 cancellationToken);
             context.ExitCode = exitCode;
         });
@@ -280,6 +318,7 @@ internal static class TopologyRootCommandFactory
         rootCommand.AddCommand(validateCommand);
         rootCommand.AddCommand(planCommand);
         rootCommand.AddCommand(applyCommand);
+        rootCommand.AddCommand(purgeCommand);
         rootCommand.AddCommand(destroyCommand);
         rootCommand.AddCommand(exportCommand);
         rootCommand.AddCommand(completionCommand);

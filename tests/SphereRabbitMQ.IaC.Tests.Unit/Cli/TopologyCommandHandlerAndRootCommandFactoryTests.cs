@@ -50,7 +50,7 @@ public sealed class TopologyCommandHandlerAdditionalTests
                 Mock.Of<IRabbitMqRuntimeServiceFactory>(),
                 Mock.Of<ITopologyDocumentWriter>(),
                 outputWriterMock.Object,
-                templateCatalogMock.Object);
+                templateCatalog: templateCatalogMock.Object);
 
             var exitCode = await handler.InitAsync("retry", outputPath, false, CancellationToken.None);
 
@@ -82,7 +82,7 @@ public sealed class TopologyCommandHandlerAdditionalTests
             Mock.Of<IRabbitMqRuntimeServiceFactory>(),
             Mock.Of<ITopologyDocumentWriter>(),
             outputWriterMock.Object,
-            templateCatalogMock.Object);
+            templateCatalog: templateCatalogMock.Object);
 
         var exitCode = await handler.CompletionAsync("bash", CancellationToken.None);
 
@@ -365,6 +365,7 @@ public sealed class TopologyCommandHandlerAdditionalTests
         IRabbitMqRuntimeServiceFactory runtimeFactory,
         ITopologyDocumentWriter documentWriter,
         ICommandOutputWriter outputWriter,
+        IDestructiveCommandPrompter? destructiveCommandPrompter = null,
         ITopologyTemplateCatalog? templateCatalog = null)
         => new(
             parser,
@@ -373,6 +374,7 @@ public sealed class TopologyCommandHandlerAdditionalTests
             runtimeFactory,
             documentWriter,
             outputWriter,
+            destructiveCommandPrompter ?? Mock.Of<IDestructiveCommandPrompter>(),
             templateCatalog ?? CreateTemplateCatalog());
 
     private static ITopologyTemplateCatalog CreateTemplateCatalog()
@@ -412,10 +414,14 @@ public sealed class TopologyRootCommandFactoryTests
 
         var rootCommand = TopologyRootCommandFactory.Create(services);
 
-        Assert.Equal(["init", "validate", "plan", "apply", "destroy", "export", "completion"], rootCommand.Subcommands.Select(command => command.Name).ToArray());
+        Assert.Equal(["init", "validate", "plan", "apply", "purge", "destroy", "export", "completion"], rootCommand.Subcommands.Select(command => command.Name).ToArray());
         Assert.True(GetCommand(rootCommand, "validate").Options.OfType<Option<string>>().Single(option => option.Name == "file").IsRequired);
         Assert.Contains(GetCommand(rootCommand, "apply").Options, option => option.Name == "migrate");
         Assert.Contains(GetCommand(rootCommand, "destroy").Options, option => option.Name == "allow-destructive");
+        Assert.Contains(GetCommand(rootCommand, "destroy").Options, option => option.Name == "auto-approve");
+        Assert.DoesNotContain(GetCommand(rootCommand, "destroy").Options, option => option.Name == "destroy-vhost");
+        Assert.Contains(GetCommand(rootCommand, "purge").Options, option => option.Name == "allow-destructive");
+        Assert.Contains(GetCommand(rootCommand, "purge").Options, option => option.Name == "auto-approve");
         Assert.Contains(GetCommand(rootCommand, "export").Options, option => option.Name == "output-file");
         Assert.Contains(GetCommand(rootCommand, "export").Options, option => option.Name == "include-broker");
     }
@@ -784,12 +790,161 @@ public sealed class TopologyRootCommandFactoryTests
     }
 
     [Fact]
-    public async Task Create_InvokedDestroyCommand_ExecutesDestroyHandlerLambda_WithDestroyVhostFlag()
+    public async Task Create_InvokedDestroyCommand_ExecutesDestroyHandlerLambda_ForFullVirtualHostDeletion()
     {
         var parserMock = new Mock<ITopologyParser>(MockBehavior.Strict);
         var runtimeFactoryMock = new Mock<IRabbitMqRuntimeServiceFactory>(MockBehavior.Strict);
         var outputWriterMock = new Mock<ICommandOutputWriter>(MockBehavior.Strict);
         var workflowMock = new Mock<ITopologyWorkflowService>(MockBehavior.Strict);
+        var destructivePrompterMock = new Mock<IDestructiveCommandPrompter>(MockBehavior.Strict);
+
+        var filePath = Path.GetTempFileName();
+
+        try
+        {
+            await File.WriteAllTextAsync(filePath, "topology: ignored");
+
+            parserMock.Setup(parser => parser.ParseAsync(It.IsAny<Stream>(), It.IsAny<CancellationToken>())).ReturnsAsync(new TopologyDocument
+            {
+                VirtualHosts = [new VirtualHostDocument { Name = "sales" }],
+            });
+            workflowMock
+                .Setup(service => service.DestroyAsync(It.IsAny<Stream>(), true, It.IsAny<CancellationToken>()))
+                .ReturnsAsync((
+                    new TopologyDefinition([new VirtualHostDefinition("sales")]),
+                    TopologyValidationResult.Success,
+                    new TopologyPlan(Array.Empty<TopologyPlanOperation>())));
+            runtimeFactoryMock
+                .Setup(factory => factory.Create(It.IsAny<RabbitMqManagementOptions>()))
+                .Returns(CreateRuntimeServices(workflowMock.Object));
+            outputWriterMock.Setup(writer => writer.WriteText(It.IsAny<string>()));
+            destructivePrompterMock
+                .Setup(prompter => prompter.ConfirmAsync("destroy", It.IsAny<CancellationToken>()))
+                .ReturnsAsync(true);
+
+            using var services = new ServiceCollection()
+                .AddSingleton<ITopologyTemplateCatalog>(CreateTemplateCatalog())
+                .AddSingleton(CreateHandler(
+                    parserMock.Object,
+                    Mock.Of<ITopologyNormalizer>(),
+                    Mock.Of<ITopologyValidator>(),
+                    runtimeFactoryMock.Object,
+                    Mock.Of<ITopologyDocumentWriter>(),
+                    outputWriterMock.Object,
+                    destructiveCommandPrompter: destructivePrompterMock.Object))
+                .BuildServiceProvider();
+
+            var rootCommand = TopologyRootCommandFactory.Create(services);
+            var exitCode = await rootCommand.InvokeAsync([
+                "destroy",
+                "--file", filePath,
+                "--allow-destructive",
+            ]);
+
+            Assert.Equal(CommandExitCodes.Success, exitCode);
+            workflowMock.Verify(service => service.DestroyAsync(It.IsAny<Stream>(), true, It.IsAny<CancellationToken>()), Times.Once);
+        }
+        finally
+        {
+            File.Delete(filePath);
+        }
+    }
+
+    [Fact]
+    public async Task Create_InvokedPurgeCommand_PurgesNormalizedQueues()
+    {
+        var parserMock = new Mock<ITopologyParser>(MockBehavior.Strict);
+        var normalizerMock = new Mock<ITopologyNormalizer>(MockBehavior.Strict);
+        var validatorMock = new Mock<ITopologyValidator>(MockBehavior.Strict);
+        var runtimeFactoryMock = new Mock<IRabbitMqRuntimeServiceFactory>(MockBehavior.Strict);
+        var outputWriterMock = new Mock<ICommandOutputWriter>(MockBehavior.Strict);
+        var apiClientMock = new Mock<IRabbitMqManagementApiClient>(MockBehavior.Strict);
+        var destructivePrompterMock = new Mock<IDestructiveCommandPrompter>(MockBehavior.Strict);
+
+        var filePath = Path.GetTempFileName();
+
+        try
+        {
+            await File.WriteAllTextAsync(filePath, "topology: ignored");
+
+            var topologyDocument = new TopologyDocument
+            {
+                VirtualHosts = [new VirtualHostDocument { Name = "sales" }],
+            };
+            var topologyDefinition = new TopologyDefinition(
+            [
+                new VirtualHostDefinition(
+                    "sales",
+                    Array.Empty<ExchangeDefinition>(),
+                    [
+                        new QueueDefinition("orders"),
+                        new QueueDefinition("orders.debug"),
+                    ],
+                    Array.Empty<BindingDefinition>()),
+            ]);
+
+            parserMock.Setup(parser => parser.ParseAsync(It.IsAny<Stream>(), It.IsAny<CancellationToken>())).ReturnsAsync(topologyDocument);
+            normalizerMock.Setup(normalizer => normalizer.NormalizeAsync(topologyDocument, It.IsAny<CancellationToken>())).ReturnsAsync(topologyDefinition);
+            validatorMock.Setup(validator => validator.ValidateAsync(topologyDefinition, It.IsAny<CancellationToken>())).ReturnsAsync(TopologyValidationResult.Success);
+            apiClientMock.Setup(client => client.PurgeQueueAsync("sales", "orders", It.IsAny<CancellationToken>())).Returns(ValueTask.CompletedTask);
+            apiClientMock.Setup(client => client.PurgeQueueAsync("sales", "orders.debug", It.IsAny<CancellationToken>())).Returns(ValueTask.CompletedTask);
+            runtimeFactoryMock
+                .Setup(factory => factory.Create(It.IsAny<RabbitMqManagementOptions>()))
+                .Returns(new RabbitMqRuntimeServices(
+                    new HttpClient(),
+                    new RabbitMqManagementOptions
+                    {
+                        BaseUri = new Uri("http://localhost:15672/api/"),
+                        Username = "guest",
+                        Password = "guest",
+                    },
+                    apiClientMock.Object,
+                    Mock.Of<global::SphereRabbitMQ.IaC.Application.Broker.Interfaces.IBrokerTopologyReader>(),
+                    Mock.Of<global::SphereRabbitMQ.IaC.Application.Apply.Interfaces.ITopologyApplier>(),
+                    Mock.Of<global::SphereRabbitMQ.IaC.Application.Export.Interfaces.ITopologyExporter>(),
+                    Mock.Of<ITopologyWorkflowService>()));
+            outputWriterMock.Setup(writer => writer.WriteText(It.IsAny<string>()));
+            destructivePrompterMock
+                .Setup(prompter => prompter.ConfirmAsync("purge", It.IsAny<CancellationToken>()))
+                .ReturnsAsync(true);
+
+            using var services = new ServiceCollection()
+                .AddSingleton<ITopologyTemplateCatalog>(CreateTemplateCatalog())
+                .AddSingleton(CreateHandler(
+                    parserMock.Object,
+                    normalizerMock.Object,
+                    validatorMock.Object,
+                    runtimeFactoryMock.Object,
+                    Mock.Of<ITopologyDocumentWriter>(),
+                    outputWriterMock.Object,
+                    destructiveCommandPrompter: destructivePrompterMock.Object))
+                .BuildServiceProvider();
+
+            var rootCommand = TopologyRootCommandFactory.Create(services);
+            var exitCode = await rootCommand.InvokeAsync([
+                "purge",
+                "--file", filePath,
+                "--allow-destructive",
+            ]);
+
+            Assert.Equal(CommandExitCodes.Success, exitCode);
+            apiClientMock.Verify(client => client.PurgeQueueAsync("sales", "orders", It.IsAny<CancellationToken>()), Times.Once);
+            apiClientMock.Verify(client => client.PurgeQueueAsync("sales", "orders.debug", It.IsAny<CancellationToken>()), Times.Once);
+        }
+        finally
+        {
+            File.Delete(filePath);
+        }
+    }
+
+    [Fact]
+    public async Task Create_InvokedDestroyCommand_WithAutoApprove_SkipsConfirmationPrompt()
+    {
+        var parserMock = new Mock<ITopologyParser>(MockBehavior.Strict);
+        var runtimeFactoryMock = new Mock<IRabbitMqRuntimeServiceFactory>(MockBehavior.Strict);
+        var outputWriterMock = new Mock<ICommandOutputWriter>(MockBehavior.Strict);
+        var workflowMock = new Mock<ITopologyWorkflowService>(MockBehavior.Strict);
+        var destructivePrompterMock = new Mock<IDestructiveCommandPrompter>(MockBehavior.Strict);
 
         var filePath = Path.GetTempFileName();
 
@@ -820,7 +975,8 @@ public sealed class TopologyRootCommandFactoryTests
                     Mock.Of<ITopologyValidator>(),
                     runtimeFactoryMock.Object,
                     Mock.Of<ITopologyDocumentWriter>(),
-                    outputWriterMock.Object))
+                    outputWriterMock.Object,
+                    destructiveCommandPrompter: destructivePrompterMock.Object))
                 .BuildServiceProvider();
 
             var rootCommand = TopologyRootCommandFactory.Create(services);
@@ -828,11 +984,11 @@ public sealed class TopologyRootCommandFactoryTests
                 "destroy",
                 "--file", filePath,
                 "--allow-destructive",
-                "--destroy-vhost",
+                "--auto-approve",
             ]);
 
             Assert.Equal(CommandExitCodes.Success, exitCode);
-            workflowMock.Verify(service => service.DestroyAsync(It.IsAny<Stream>(), true, It.IsAny<CancellationToken>()), Times.Once);
+            destructivePrompterMock.Verify(prompter => prompter.ConfirmAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
         }
         finally
         {
@@ -850,6 +1006,7 @@ public sealed class TopologyRootCommandFactoryTests
         IRabbitMqRuntimeServiceFactory? runtimeFactory = null,
         ITopologyDocumentWriter? documentWriter = null,
         ICommandOutputWriter? outputWriter = null,
+        IDestructiveCommandPrompter? destructiveCommandPrompter = null,
         ITopologyTemplateCatalog? templateCatalog = null)
         => new(
             parser ?? Mock.Of<ITopologyParser>(),
@@ -858,6 +1015,7 @@ public sealed class TopologyRootCommandFactoryTests
             runtimeFactory ?? Mock.Of<IRabbitMqRuntimeServiceFactory>(),
             documentWriter ?? Mock.Of<ITopologyDocumentWriter>(),
             outputWriter ?? Mock.Of<ICommandOutputWriter>(),
+            destructiveCommandPrompter ?? Mock.Of<IDestructiveCommandPrompter>(),
             templateCatalog ?? CreateTemplateCatalog());
 
     private static ITopologyTemplateCatalog CreateTemplateCatalog()

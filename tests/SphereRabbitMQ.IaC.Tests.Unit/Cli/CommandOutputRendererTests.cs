@@ -92,6 +92,26 @@ public sealed class CommandOutputRendererTests
         Assert.Contains("\"resourcePath\":\"/virtualHosts/sales/queues/orders\"", json, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void RenderPurge_IncludesQueuesToPurge()
+    {
+        var result = new PurgeCommandResult(
+            false,
+            CreateBroker(),
+            TopologyValidationResult.Success,
+            [
+                new PurgeQueueResult("sales", "orders", "/virtualHosts/sales/queues/orders"),
+                new PurgeQueueResult("sales", "orders.debug", "/virtualHosts/sales/queues/orders.debug"),
+            ]);
+
+        var text = CommandOutputRenderer.RenderPurge(result);
+
+        Assert.Contains("Purge completed.", text, StringComparison.Ordinal);
+        Assert.Contains("Queues to purge:", text, StringComparison.Ordinal);
+        Assert.Contains("/virtualHosts/sales/queues/orders", text, StringComparison.Ordinal);
+        Assert.Contains("/virtualHosts/sales/queues/orders.debug", text, StringComparison.Ordinal);
+    }
+
     private static BrokerResolutionResult CreateBroker()
         => new(
             new BrokerOptions("http://localhost:15672/api/", "guest", "guest", ["sales"]),

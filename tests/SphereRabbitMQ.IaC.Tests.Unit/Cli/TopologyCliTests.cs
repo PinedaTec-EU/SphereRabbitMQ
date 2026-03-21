@@ -71,12 +71,14 @@ public sealed class TopologyCliTests
             runtimeFactoryMock.Object,
             topologyDocumentWriterMock.Object,
             commandOutputWriterMock.Object,
+            Mock.Of<IDestructiveCommandPrompter>(),
             Mock.Of<ITopologyTemplateCatalog>());
 
         var exitCode = await handler.DestroyAsync(
             "does-not-matter.yaml",
             new BrokerOptionsInput(null, null, null, null),
             TopologyOutputFormat.Text,
+            false,
             false,
             false,
             false,
@@ -146,6 +148,7 @@ public sealed class TopologyCliTests
                 runtimeFactoryMock.Object,
                 topologyDocumentWriterMock.Object,
                 commandOutputWriterMock.Object,
+                Mock.Of<IDestructiveCommandPrompter>(),
                 Mock.Of<ITopologyTemplateCatalog>());
 
             var exitCode = await handler.DestroyAsync(
@@ -153,6 +156,7 @@ public sealed class TopologyCliTests
                 new BrokerOptionsInput(null, null, null, null),
                 TopologyOutputFormat.Text,
                 true,
+                false,
                 false,
                 false,
                 false,
@@ -237,6 +241,7 @@ public sealed class TopologyCliTests
                 runtimeFactoryMock.Object,
                 topologyDocumentWriterMock.Object,
                 commandOutputWriterMock.Object,
+                Mock.Of<IDestructiveCommandPrompter>(),
                 Mock.Of<ITopologyTemplateCatalog>());
 
             var exitCode = await handler.ApplyAsync(
@@ -257,6 +262,113 @@ public sealed class TopologyCliTests
         {
             File.Delete(filePath);
         }
+    }
+
+    [Fact]
+    public async Task PurgeAsync_DryRun_IncludesGeneratedDebugQueues_WithoutCallingBroker()
+    {
+        var filePath = Path.GetTempFileName();
+
+        try
+        {
+            await File.WriteAllTextAsync(filePath, "topology: ignored");
+
+            var topologyParserMock = new Mock<ITopologyParser>(MockBehavior.Strict);
+            var topologyNormalizerMock = new Mock<ITopologyNormalizer>(MockBehavior.Strict);
+            var topologyValidatorMock = new Mock<ITopologyValidator>(MockBehavior.Strict);
+            var runtimeFactoryMock = new Mock<IRabbitMqRuntimeServiceFactory>(MockBehavior.Strict);
+            var topologyDocumentWriterMock = new Mock<ITopologyDocumentWriter>(MockBehavior.Strict);
+            var commandOutputWriterMock = new Mock<ICommandOutputWriter>(MockBehavior.Strict);
+
+            var topologyDocument = new TopologyDocument
+            {
+                VirtualHosts = [new VirtualHostDocument { Name = "sales" }],
+            };
+            var topologyDefinition = new TopologyDefinition(
+            [
+                new VirtualHostDefinition(
+                    "sales",
+                    Array.Empty<ExchangeDefinition>(),
+                    [
+                        new QueueDefinition("orders"),
+                        new QueueDefinition("orders.debug"),
+                    ],
+                    Array.Empty<BindingDefinition>()),
+            ]);
+
+            topologyParserMock
+                .Setup(parser => parser.ParseAsync(It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(topologyDocument);
+            topologyNormalizerMock
+                .Setup(normalizer => normalizer.NormalizeAsync(topologyDocument, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(topologyDefinition);
+            topologyValidatorMock
+                .Setup(validator => validator.ValidateAsync(topologyDefinition, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(TopologyValidationResult.Success);
+            commandOutputWriterMock.Setup(writer => writer.WriteText(It.IsAny<string>()));
+
+            var handler = new TopologyCommandHandler(
+                topologyParserMock.Object,
+                topologyNormalizerMock.Object,
+                topologyValidatorMock.Object,
+                runtimeFactoryMock.Object,
+                topologyDocumentWriterMock.Object,
+                commandOutputWriterMock.Object,
+                Mock.Of<IDestructiveCommandPrompter>(),
+                Mock.Of<ITopologyTemplateCatalog>());
+
+            var exitCode = await handler.PurgeAsync(
+                filePath,
+                new BrokerOptionsInput(null, null, null, null),
+                TopologyOutputFormat.Text,
+                true,
+                false,
+                false,
+                false,
+                CancellationToken.None);
+
+            Assert.Equal(CommandExitCodes.Success, exitCode);
+            runtimeFactoryMock.Verify(factory => factory.Create(It.IsAny<RabbitMqManagementOptions>()), Times.Never);
+            commandOutputWriterMock.Verify(writer => writer.WriteText(It.Is<string>(value => value.Contains("/virtualHosts/sales/queues/orders.debug", StringComparison.Ordinal))), Times.Once);
+        }
+        finally
+        {
+            File.Delete(filePath);
+        }
+    }
+
+    [Fact]
+    public async Task PurgeAsync_ReturnsPermissionRequired_WhenUserDoesNotConfirm()
+    {
+        var destructivePrompterMock = new Mock<IDestructiveCommandPrompter>(MockBehavior.Strict);
+        var commandOutputWriterMock = new Mock<ICommandOutputWriter>(MockBehavior.Strict);
+        commandOutputWriterMock.Setup(writer => writer.WriteText(It.IsAny<string>()));
+        destructivePrompterMock
+            .Setup(prompter => prompter.ConfirmAsync("purge", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var handler = new TopologyCommandHandler(
+            Mock.Of<ITopologyParser>(),
+            Mock.Of<ITopologyNormalizer>(),
+            Mock.Of<ITopologyValidator>(),
+            Mock.Of<IRabbitMqRuntimeServiceFactory>(),
+            Mock.Of<ITopologyDocumentWriter>(),
+            commandOutputWriterMock.Object,
+            destructivePrompterMock.Object,
+            Mock.Of<ITopologyTemplateCatalog>());
+
+        var exitCode = await handler.PurgeAsync(
+            "ignored.yaml",
+            new BrokerOptionsInput(null, null, null, null),
+            TopologyOutputFormat.Text,
+            false,
+            false,
+            true,
+            false,
+            CancellationToken.None);
+
+        Assert.Equal(CommandExitCodes.DestructivePermissionRequired, exitCode);
+        commandOutputWriterMock.Verify(writer => writer.WriteText(It.Is<string>(value => value.Contains("cancelled", StringComparison.OrdinalIgnoreCase))), Times.Once);
     }
 
     [Fact]
@@ -297,6 +409,7 @@ public sealed class TopologyCliTests
                 runtimeFactoryMock.Object,
                 topologyDocumentWriterMock.Object,
                 commandOutputWriterMock.Object,
+                Mock.Of<IDestructiveCommandPrompter>(),
                 Mock.Of<ITopologyTemplateCatalog>());
 
             var exitCode = await handler.ApplyAsync(
@@ -398,6 +511,7 @@ public sealed class TopologyCliTests
                 runtimeFactoryMock.Object,
                 topologyDocumentWriterMock.Object,
                 commandOutputWriterMock.Object,
+                Mock.Of<IDestructiveCommandPrompter>(),
                 Mock.Of<ITopologyTemplateCatalog>());
 
             var exitCode = await handler.ApplyAsync(
@@ -459,6 +573,7 @@ public sealed class TopologyCliTests
                 runtimeFactoryMock.Object,
                 topologyDocumentWriterMock.Object,
                 commandOutputWriterMock.Object,
+                Mock.Of<IDestructiveCommandPrompter>(),
                 Mock.Of<ITopologyTemplateCatalog>());
 
             var exitCode = await handler.ApplyAsync(

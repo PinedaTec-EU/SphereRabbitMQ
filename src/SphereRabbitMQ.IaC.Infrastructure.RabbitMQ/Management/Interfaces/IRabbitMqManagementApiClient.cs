@@ -64,6 +64,11 @@ public interface IRabbitMqManagementApiClient
     ValueTask DeleteQueueAsync(string virtualHostName, string queueName, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Removes all messages from a queue when it exists.
+    /// </summary>
+    ValueTask PurgeQueueAsync(string virtualHostName, string queueName, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Creates a binding.
     /// </summary>
     ValueTask CreateBindingAsync(string virtualHostName, BindingDefinition binding, CancellationToken cancellationToken = default);

@@ -23,6 +23,7 @@ public static class CliServiceCollectionExtensions
         services.AddYamlInfrastructure();
         services.AddRabbitMqInfrastructure();
         services.AddSingleton<ICommandOutputWriter, CommandOutputWriter>();
+        services.AddSingleton<IDestructiveCommandPrompter, DestructiveCommandPrompter>();
         services.AddSingleton<ITopologyTemplateCatalog, TopologyTemplateCatalog>();
         services.AddSingleton<TopologyCommandHandler>();
         return services;

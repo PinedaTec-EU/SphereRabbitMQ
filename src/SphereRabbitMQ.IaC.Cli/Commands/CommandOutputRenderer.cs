@@ -57,6 +57,29 @@ internal static class CommandOutputRenderer
         return builder.ToString().TrimEnd();
     }
 
+    internal static string RenderPurge(PurgeCommandResult result)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine(result.DryRun ? "Dry-run purge completed." : "Purge completed.");
+        AppendBroker(builder, result.Broker);
+        builder.AppendLine(result.Validation.IsValid ? "Validation succeeded." : "Validation failed.");
+        AppendIssues(builder, result.Validation.Issues);
+
+        if (!result.Validation.IsValid)
+        {
+            return builder.ToString().TrimEnd();
+        }
+
+        builder.AppendLine(result.Queues.Count == 0 ? "No queues matched the topology." : "Queues to purge:");
+
+        foreach (var queue in result.Queues)
+        {
+            builder.AppendLine($"- {queue.ResourcePath}");
+        }
+
+        return builder.ToString().TrimEnd();
+    }
+
     internal static string RenderExport(ExportCommandResult result)
     {
         var builder = new StringBuilder();

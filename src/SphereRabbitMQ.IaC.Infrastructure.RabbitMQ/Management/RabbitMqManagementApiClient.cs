@@ -106,6 +106,10 @@ public sealed class RabbitMqManagementApiClient : IRabbitMqManagementApiClient
         => SendDeleteAsync($"queues/{Encode(virtualHostName)}/{Encode(queueName)}", cancellationToken, allowNotFound: true);
 
     /// <inheritdoc />
+    public ValueTask PurgeQueueAsync(string virtualHostName, string queueName, CancellationToken cancellationToken = default)
+        => SendDeleteAsync($"queues/{Encode(virtualHostName)}/{Encode(queueName)}/contents", cancellationToken, allowNotFound: true);
+
+    /// <inheritdoc />
     public ValueTask CreateBindingAsync(string virtualHostName, BindingDefinition binding, CancellationToken cancellationToken = default)
         => SendPostAsync(
             BuildBindingEndpoint(virtualHostName, binding),

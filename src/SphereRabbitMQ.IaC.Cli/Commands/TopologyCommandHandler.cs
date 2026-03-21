@@ -22,6 +22,9 @@ internal sealed class TopologyCommandHandler
     private const string DefaultPassword = "guest";
     private const string DefaultUsername = "guest";
     private const string DestroyPermissionMessage = "Destroy requires '--allow-destructive' unless '--dry-run' is specified.";
+    private const string DestroyCancelledMessage = "Destroy cancelled by user.";
+    private const string PurgePermissionMessage = "Purge requires '--allow-destructive' unless '--dry-run' is specified.";
+    private const string PurgeCancelledMessage = "Purge cancelled by user.";
     private const string ToolName = "SphereRabbitMQ";
     private const string ManagementUrlEnvironmentVariable = "SPHERE_RABBITMQ_MANAGEMENT_URL";
     private const string PasswordEnvironmentVariable = "SPHERE_RABBITMQ_PASSWORD";
@@ -35,6 +38,7 @@ internal sealed class TopologyCommandHandler
     private readonly IRabbitMqRuntimeServiceFactory _rabbitMqRuntimeServiceFactory;
     private readonly ITopologyDocumentWriter _topologyDocumentWriter;
     private readonly ICommandOutputWriter _commandOutputWriter;
+    private readonly IDestructiveCommandPrompter _destructiveCommandPrompter;
     private readonly ITopologyTemplateCatalog _topologyTemplateCatalog;
 
     public TopologyCommandHandler(
@@ -44,6 +48,7 @@ internal sealed class TopologyCommandHandler
         IRabbitMqRuntimeServiceFactory rabbitMqRuntimeServiceFactory,
         ITopologyDocumentWriter topologyDocumentWriter,
         ICommandOutputWriter commandOutputWriter,
+        IDestructiveCommandPrompter destructiveCommandPrompter,
         ITopologyTemplateCatalog topologyTemplateCatalog)
     {
         _topologyParser = topologyParser;
@@ -52,6 +57,7 @@ internal sealed class TopologyCommandHandler
         _rabbitMqRuntimeServiceFactory = rabbitMqRuntimeServiceFactory;
         _topologyDocumentWriter = topologyDocumentWriter;
         _commandOutputWriter = commandOutputWriter;
+        _destructiveCommandPrompter = destructiveCommandPrompter;
         _topologyTemplateCatalog = topologyTemplateCatalog;
     }
 
@@ -341,6 +347,7 @@ internal sealed class TopologyCommandHandler
         bool dryRun,
         bool verbose,
         bool allowDestructive,
+        bool autoApprove,
         bool destroyVirtualHost,
         CancellationToken cancellationToken)
     {
@@ -349,6 +356,12 @@ internal sealed class TopologyCommandHandler
         if (!dryRun && !allowDestructive)
         {
             WriteError(outputFormat, "destroy", new InvalidOperationException(DestroyPermissionMessage));
+            return CommandExitCodes.DestructivePermissionRequired;
+        }
+
+        if (!dryRun && !autoApprove && !await _destructiveCommandPrompter.ConfirmAsync("destroy", cancellationToken))
+        {
+            WriteError(outputFormat, "destroy", new InvalidOperationException(DestroyCancelledMessage));
             return CommandExitCodes.DestructivePermissionRequired;
         }
 
@@ -402,6 +415,92 @@ internal sealed class TopologyCommandHandler
         catch (Exception exception)
         {
             WriteError(outputFormat, dryRun ? "destroy dry-run" : "destroy", exception);
+            return CommandExitCodes.ExecutionFailed;
+        }
+    }
+
+    public async Task<int> PurgeAsync(
+        string filePath,
+        BrokerOptionsInput brokerOptionsInput,
+        TopologyOutputFormat outputFormat,
+        bool dryRun,
+        bool verbose,
+        bool allowDestructive,
+        bool autoApprove,
+        CancellationToken cancellationToken)
+    {
+        WriteStartup(outputFormat);
+
+        if (!dryRun && !allowDestructive)
+        {
+            WriteError(outputFormat, "purge", new InvalidOperationException(PurgePermissionMessage));
+            return CommandExitCodes.DestructivePermissionRequired;
+        }
+
+        if (!dryRun && !autoApprove && !await _destructiveCommandPrompter.ConfirmAsync("purge", cancellationToken))
+        {
+            WriteError(outputFormat, "purge", new InvalidOperationException(PurgeCancelledMessage));
+            return CommandExitCodes.DestructivePermissionRequired;
+        }
+
+        try
+        {
+            await using var stream = File.OpenRead(filePath);
+            WriteVerbose(outputFormat, verbose, "Phase: parse topology file.");
+            var topologyDocument = await ParseTopologyDocumentAsync(stream, cancellationToken);
+            WriteVerbose(outputFormat, verbose, "Phase: normalize topology.");
+            var definition = await _topologyNormalizer.NormalizeAsync(topologyDocument, cancellationToken);
+            WriteVerbose(outputFormat, verbose, "Phase: validate topology.");
+            var validation = await _topologyValidator.ValidateAsync(definition, cancellationToken);
+            WriteVerbose(outputFormat, verbose, "Phase: resolve broker settings.");
+            var broker = ResolveBrokerOptions(brokerOptionsInput, topologyDocument.Broker, topologyDocument.VirtualHosts);
+            var brokerValidation = ValidateBrokerVirtualHostAlignment(broker, topologyDocument.VirtualHosts);
+            if (!brokerValidation.IsValid)
+            {
+                var invalidBrokerResult = new PurgeCommandResult(dryRun, broker, brokerValidation, Array.Empty<PurgeQueueResult>());
+                Write(outputFormat, invalidBrokerResult, CommandOutputRenderer.RenderPurge(invalidBrokerResult));
+                return CommandExitCodes.ValidationFailed;
+            }
+
+            var result = new PurgeCommandResult(dryRun, broker, validation, CreatePurgeQueueResults(definition));
+            WriteConnection(outputFormat, broker);
+
+            if (!validation.IsValid)
+            {
+                Write(outputFormat, result, CommandOutputRenderer.RenderPurge(result));
+                return CommandExitCodes.ValidationFailed;
+            }
+
+            if (!dryRun)
+            {
+                WriteVerbose(outputFormat, verbose, "Phase: purge topology queues.");
+                using var runtimeServices = CreateRuntimeServices(broker.Options);
+
+                foreach (var queue in result.Queues)
+                {
+                    await runtimeServices.ManagementApiClient.PurgeQueueAsync(
+                        queue.VirtualHostName,
+                        queue.QueueName,
+                        cancellationToken);
+                }
+            }
+
+            Write(outputFormat, result, CommandOutputRenderer.RenderPurge(result));
+            return CommandExitCodes.Success;
+        }
+        catch (TopologyNormalizationException exception)
+        {
+            var result = new PurgeCommandResult(
+                dryRun,
+                CreateFailureBrokerResolutionResult(),
+                new Domain.Topology.TopologyValidationResult(exception.Issues),
+                Array.Empty<PurgeQueueResult>());
+            Write(outputFormat, result, CommandOutputRenderer.RenderPurge(result));
+            return CommandExitCodes.ValidationFailed;
+        }
+        catch (Exception exception)
+        {
+            WriteError(outputFormat, dryRun ? "purge dry-run" : "purge", exception);
             return CommandExitCodes.ExecutionFailed;
         }
     }
@@ -577,6 +676,17 @@ internal sealed class TopologyCommandHandler
             new BrokerOptionValue<string>(DefaultUsername, BrokerOptionSource.Default),
             BrokerOptionSource.Default,
             new BrokerOptionValue<IReadOnlyList<string>>(Array.Empty<string>(), BrokerOptionSource.Default));
+
+    private static IReadOnlyList<PurgeQueueResult> CreatePurgeQueueResults(TopologyDefinition definition)
+        => definition.VirtualHosts
+            .SelectMany(
+                virtualHost => virtualHost.Queues.Select(
+                    queue => new PurgeQueueResult(
+                        virtualHost.Name,
+                        queue.Name,
+                        $"/virtualHosts/{virtualHost.Name}/queues/{queue.Name}")))
+            .OrderBy(queue => queue.ResourcePath, StringComparer.Ordinal)
+            .ToArray();
 
     private static TopologyPlan CreateEmptyPlan()
         => new(Array.Empty<TopologyPlanOperation>());
