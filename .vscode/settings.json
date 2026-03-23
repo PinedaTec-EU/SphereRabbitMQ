@@ -20,9 +20,6 @@
             "source.organizeImports"
         ]
     },
-    "chat.mcp.serverSampling": {
-        "TravelAgent/.vscode/mcp.json: io.github.mongodb-js/mongodb-mcp-server": {}
-    },
     "editor.rulers": [
         {
             "column": 170,
