@@ -39,6 +39,15 @@ Distribution:
 - runtime library: NuGet package `SphereRabbitMQ`
 - CLI: NuGet `dotnet tool` package `SphereRabbitMQ.IaC.Tool` providing the `sprmq` command
 
+Pipeline integration:
+
+- local GitHub Action: `.github/actions/apply-rabbitmq-topology`
+- local GitHub Action: `.github/actions/destroy-rabbitmq-vhost`
+- local GitHub Action: `.github/actions/purge-rabbitmq-queues`
+- validates the YAML first and then runs `sprmq apply`
+- supports non-interactive `destroy` and `purge` execution for CI/CD maintenance workflows
+- can reuse a repository `dotnet-tools.json` manifest or install `SphereRabbitMQ.IaC.Tool` as a fallback
+
 ### `SphereRabbitMQ`
 
 Runtime library for:
@@ -51,6 +60,60 @@ Runtime library for:
 - topology validation at startup
 
 Runtime documentation: [docs/runtime-library.md](/Users/jmr.pineda/Projects/GitHub/PinedaTec.eu/SphereRabbitMQ/docs/runtime-library.md)
+
+## GitHub Action For Pipelines
+
+This repository now includes composite GitHub Actions under `.github/actions/` so a workflow can execute `sprmq` operations without duplicating the bootstrap steps in every pipeline.
+
+Available actions:
+
+- `.github/actions/apply-rabbitmq-topology`
+- `.github/actions/destroy-rabbitmq-vhost`
+- `.github/actions/purge-rabbitmq-queues`
+
+Shared inputs:
+
+- `topology_file`: relative or absolute path to the topology YAML file
+- `dotnet_root`: directory where `dotnet` is already installed
+- `sprmq_tool_path`: optional writable directory for fallback tool installation
+- `tool_version`: optional `SphereRabbitMQ.IaC.Tool` version used by the fallback install path
+
+Additional destructive-action input:
+
+- `dry_run`: optional flag for `destroy` and `purge`
+
+Broker settings should be provided through the same environment variables used by the CLI:
+
+- `SPHERE_RABBITMQ_MANAGEMENT_URL`
+- `SPHERE_RABBITMQ_USERNAME`
+- `SPHERE_RABBITMQ_PASSWORD`
+- `SPHERE_RABBITMQ_VHOSTS` when the workflow needs to restrict the virtual hosts in scope
+
+Example workflow step:
+
+```yaml
+jobs:
+  apply-topology:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Apply RabbitMQ topology
+        uses: ./.github/actions/apply-rabbitmq-topology
+        with:
+          topology_file: samples/minimal-topology.yaml
+          dotnet_root: ${{ env.DOTNET_ROOT }}
+        env:
+          SPHERE_RABBITMQ_MANAGEMENT_URL: ${{ secrets.SPHERE_RABBITMQ_MANAGEMENT_URL }}
+          SPHERE_RABBITMQ_USERNAME: ${{ secrets.SPHERE_RABBITMQ_USERNAME }}
+          SPHERE_RABBITMQ_PASSWORD: ${{ secrets.SPHERE_RABBITMQ_PASSWORD }}
+```
+
+For CLI-specific details, see [docs/cli.md](/Users/jmr.pineda/Projects/GitHub/PinedaTec.eu/SphereRabbitMQ/docs/cli.md).
 
 ## YAML Dead-Letter To Another Queue
 

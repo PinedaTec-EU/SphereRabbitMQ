@@ -66,6 +66,116 @@ During development, you can still use:
 dotnet run --project src/SphereRabbitMQ.IaC.Cli -- --help
 ```
 
+## GitHub Actions
+
+The repository includes composite GitHub Actions under `.github/actions/` for CI/CD pipelines that need to run `sprmq` operations against a topology YAML.
+
+Available actions:
+
+- `.github/actions/apply-rabbitmq-topology`
+- `.github/actions/destroy-rabbitmq-vhost`
+- `.github/actions/purge-rabbitmq-queues`
+
+Behavior:
+
+- resolves the topology file path relative to `GITHUB_WORKSPACE`
+- restores `sprmq` from `dotnet-tools.json` when the repository already declares it
+- otherwise installs `SphereRabbitMQ.IaC.Tool` into a writable tool path
+- runs `validate` before the target command
+- `destroy` and `purge` run non-interactively with `--allow-destructive --auto-approve`
+
+Shared inputs:
+
+- `topology_file` required
+- `dotnet_root` required
+- `sprmq_tool_path` optional
+- `tool_version` optional, default `0.1.3.99`
+
+Additional destructive-action input:
+
+- `dry_run` optional, default `false`
+
+The action uses the same broker resolution as the CLI, so workflows can pass environment variables such as:
+
+- `SPHERE_RABBITMQ_MANAGEMENT_URL`
+- `SPHERE_RABBITMQ_USERNAME`
+- `SPHERE_RABBITMQ_PASSWORD`
+- `SPHERE_RABBITMQ_VHOSTS`
+
+Apply example:
+
+```yaml
+jobs:
+  topology:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Validate and apply RabbitMQ topology
+        uses: ./.github/actions/apply-rabbitmq-topology
+        with:
+          topology_file: infra/rabbitmq/topology.yaml
+          dotnet_root: ${{ env.DOTNET_ROOT }}
+        env:
+          SPHERE_RABBITMQ_MANAGEMENT_URL: ${{ secrets.SPHERE_RABBITMQ_MANAGEMENT_URL }}
+          SPHERE_RABBITMQ_USERNAME: ${{ secrets.SPHERE_RABBITMQ_USERNAME }}
+          SPHERE_RABBITMQ_PASSWORD: ${{ secrets.SPHERE_RABBITMQ_PASSWORD }}
+```
+
+Destroy example:
+
+```yaml
+jobs:
+  destroy-topology:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Destroy RabbitMQ virtual hosts
+        uses: ./.github/actions/destroy-rabbitmq-vhost
+        with:
+          topology_file: infra/rabbitmq/topology.yaml
+          dotnet_root: ${{ env.DOTNET_ROOT }}
+          dry_run: "true"
+        env:
+          SPHERE_RABBITMQ_MANAGEMENT_URL: ${{ secrets.SPHERE_RABBITMQ_MANAGEMENT_URL }}
+          SPHERE_RABBITMQ_USERNAME: ${{ secrets.SPHERE_RABBITMQ_USERNAME }}
+          SPHERE_RABBITMQ_PASSWORD: ${{ secrets.SPHERE_RABBITMQ_PASSWORD }}
+```
+
+Purge example:
+
+```yaml
+jobs:
+  purge-topology:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Purge RabbitMQ queues
+        uses: ./.github/actions/purge-rabbitmq-queues
+        with:
+          topology_file: infra/rabbitmq/topology.yaml
+          dotnet_root: ${{ env.DOTNET_ROOT }}
+          dry_run: "true"
+        env:
+          SPHERE_RABBITMQ_MANAGEMENT_URL: ${{ secrets.SPHERE_RABBITMQ_MANAGEMENT_URL }}
+          SPHERE_RABBITMQ_USERNAME: ${{ secrets.SPHERE_RABBITMQ_USERNAME }}
+          SPHERE_RABBITMQ_PASSWORD: ${{ secrets.SPHERE_RABBITMQ_PASSWORD }}
+```
+
 ## Commands
 
 ### `init`
