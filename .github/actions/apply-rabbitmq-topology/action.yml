@@ -5,14 +5,23 @@ inputs:
   topology_file:
     description: Relative or absolute path to the topology YAML file.
     required: true
+  dotnet_version:
+    description: .NET SDK version required to run the sprmq CLI.
+    required: false
+    default: "10.0.x"
   tool_version:
-    description: Version of sphererabbitmq.iac.tool to install when dotnet-tools.json is unavailable.
+    description: Version of sphererabbitmq.iac.tool to install when no local sprmq manifest entry is available.
     required: false
     default: "0.1.3.99"
 
 runs:
   using: composite
   steps:
+    - name: Setup .NET SDK
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ inputs.dotnet_version }}
+
     - name: Resolve topology path
       id: topology
       shell: bash
@@ -29,29 +38,43 @@ runs:
         [ -f "$TOPOLOGY_FILE" ] || { echo "RabbitMQ topology file not found: $TOPOLOGY_FILE"; exit 1; }
         echo "topology_file=$TOPOLOGY_FILE" >> "$GITHUB_OUTPUT"
 
+    - name: Detect local sprmq tool manifest
+      id: manifest
+      shell: bash
+      run: |
+        set -euo pipefail
+        TOOL_MANIFEST_PATH="${GITHUB_WORKSPACE}/dotnet-tools.json"
+
+        if [[ -f "$TOOL_MANIFEST_PATH" ]] && grep -Eiq '"(sphererabbitmq\\.iac\\.tool|sprmq)"' "$TOOL_MANIFEST_PATH"; then
+          echo "use_local_manifest=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        echo "use_local_manifest=false" >> "$GITHUB_OUTPUT"
+
     - name: Restore local dotnet tools
-      if: ${{ hashFiles('dotnet-tools.json') != '' }}
+      if: ${{ steps.manifest.outputs.use_local_manifest == 'true' }}
       shell: bash
       run: |
         set -euo pipefail
         dotnet tool restore
 
     - name: Validate topology with local tool manifest
-      if: ${{ hashFiles('dotnet-tools.json') != '' }}
+      if: ${{ steps.manifest.outputs.use_local_manifest == 'true' }}
       shell: bash
       run: |
         set -euo pipefail
         dotnet tool run sprmq -- validate --file "${{ steps.topology.outputs.topology_file }}"
 
     - name: Apply topology with local tool manifest
-      if: ${{ hashFiles('dotnet-tools.json') != '' }}
+      if: ${{ steps.manifest.outputs.use_local_manifest == 'true' }}
       shell: bash
       run: |
         set -euo pipefail
         dotnet tool run sprmq -- apply --file "${{ steps.topology.outputs.topology_file }}"
 
     - name: Install sprmq fallback tool
-      if: ${{ hashFiles('dotnet-tools.json') == '' }}
+      if: ${{ steps.manifest.outputs.use_local_manifest != 'true' }}
       shell: bash
       run: |
         set -euo pipefail
@@ -61,14 +84,14 @@ runs:
           --version "${{ inputs.tool_version }}"
 
     - name: Validate topology with fallback tool
-      if: ${{ hashFiles('dotnet-tools.json') == '' }}
+      if: ${{ steps.manifest.outputs.use_local_manifest != 'true' }}
       shell: bash
       run: |
         set -euo pipefail
         "${RUNNER_TEMP}/sprmq-tool/sprmq" validate --file "${{ steps.topology.outputs.topology_file }}"
 
     - name: Apply topology with fallback tool
-      if: ${{ hashFiles('dotnet-tools.json') == '' }}
+      if: ${{ steps.manifest.outputs.use_local_manifest != 'true' }}
       shell: bash
       run: |
         set -euo pipefail
