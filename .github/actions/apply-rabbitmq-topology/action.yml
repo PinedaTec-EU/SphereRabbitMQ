@@ -9,6 +9,14 @@ inputs:
     description: .NET SDK version required to run the sprmq CLI.
     required: false
     default: "10.0.x"
+  dotnet_install_dir:
+    description: Writable directory where the .NET SDK should be installed when setup-dotnet needs to provision it.
+    required: false
+    default: ""
+  sprmq_tool_path:
+    description: Writable directory used to install the fallback sprmq tool when no local manifest entry is available.
+    required: false
+    default: ""
   tool_version:
     description: Version of sphererabbitmq.iac.tool to install when no local sprmq manifest entry is available.
     required: false
@@ -17,10 +25,32 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Resolve writable tool paths
+      id: paths
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        DOTNET_INSTALL_DIR="${{ inputs.dotnet_install_dir }}"
+        if [[ -z "$DOTNET_INSTALL_DIR" ]]; then
+          DOTNET_INSTALL_DIR="${RUNNER_TEMP}/.dotnet"
+        fi
+
+        SPRMQ_TOOL_PATH="${{ inputs.sprmq_tool_path }}"
+        if [[ -z "$SPRMQ_TOOL_PATH" ]]; then
+          SPRMQ_TOOL_PATH="${RUNNER_TEMP}/sprmq-tool"
+        fi
+
+        mkdir -p "$DOTNET_INSTALL_DIR" "$SPRMQ_TOOL_PATH"
+
+        echo "dotnet_install_dir=$DOTNET_INSTALL_DIR" >> "$GITHUB_OUTPUT"
+        echo "sprmq_tool_path=$SPRMQ_TOOL_PATH" >> "$GITHUB_OUTPUT"
+
     - name: Setup .NET SDK
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: ${{ inputs.dotnet_version }}
+        dotnet-install-dir: ${{ steps.paths.outputs.dotnet_install_dir }}
 
     - name: Resolve topology path
       id: topology
@@ -79,7 +109,7 @@ runs:
       run: |
         set -euo pipefail
         dotnet tool install \
-          --tool-path "${RUNNER_TEMP}/sprmq-tool" \
+          --tool-path "${{ steps.paths.outputs.sprmq_tool_path }}" \
           sphererabbitmq.iac.tool \
           --version "${{ inputs.tool_version }}"
 
@@ -88,11 +118,11 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        "${RUNNER_TEMP}/sprmq-tool/sprmq" validate --file "${{ steps.topology.outputs.topology_file }}"
+        "${{ steps.paths.outputs.sprmq_tool_path }}/sprmq" validate --file "${{ steps.topology.outputs.topology_file }}"
 
     - name: Apply topology with fallback tool
       if: ${{ steps.manifest.outputs.use_local_manifest != 'true' }}
       shell: bash
       run: |
         set -euo pipefail
-        "${RUNNER_TEMP}/sprmq-tool/sprmq" apply --file "${{ steps.topology.outputs.topology_file }}"
+        "${{ steps.paths.outputs.sprmq_tool_path }}/sprmq" apply --file "${{ steps.topology.outputs.topology_file }}"
