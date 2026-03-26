@@ -5,14 +5,9 @@ inputs:
   topology_file:
     description: Relative or absolute path to the topology YAML file.
     required: true
-  dotnet_version:
-    description: .NET SDK version required to run the sprmq CLI.
-    required: false
-    default: "10.0.x"
-  dotnet_install_dir:
-    description: Writable directory where the .NET SDK should be installed when setup-dotnet needs to provision it.
-    required: false
-    default: ""
+  dotnet_root:
+    description: Directory where dotnet is already installed and accessible for the action.
+    required: true
   sprmq_tool_path:
     description: Writable directory used to install the fallback sprmq tool when no local manifest entry is available.
     required: false
@@ -25,32 +20,32 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Resolve writable tool paths
+    - name: Resolve tool paths
       id: paths
       shell: bash
       run: |
         set -euo pipefail
 
-        DOTNET_INSTALL_DIR="${{ inputs.dotnet_install_dir }}"
-        if [[ -z "$DOTNET_INSTALL_DIR" ]]; then
-          DOTNET_INSTALL_DIR="${RUNNER_TEMP}/.dotnet"
-        fi
+        DOTNET_ROOT_PATH="${{ inputs.dotnet_root }}"
+        [[ -n "$DOTNET_ROOT_PATH" ]] || { echo "dotnet_root is required."; exit 1; }
+        [[ -x "$DOTNET_ROOT_PATH/dotnet" ]] || { echo "dotnet executable not found at $DOTNET_ROOT_PATH/dotnet"; exit 1; }
 
         SPRMQ_TOOL_PATH="${{ inputs.sprmq_tool_path }}"
         if [[ -z "$SPRMQ_TOOL_PATH" ]]; then
           SPRMQ_TOOL_PATH="${RUNNER_TEMP}/sprmq-tool"
         fi
 
-        mkdir -p "$DOTNET_INSTALL_DIR" "$SPRMQ_TOOL_PATH"
+        mkdir -p "$SPRMQ_TOOL_PATH"
 
-        echo "dotnet_install_dir=$DOTNET_INSTALL_DIR" >> "$GITHUB_OUTPUT"
+        echo "dotnet_root=$DOTNET_ROOT_PATH" >> "$GITHUB_OUTPUT"
         echo "sprmq_tool_path=$SPRMQ_TOOL_PATH" >> "$GITHUB_OUTPUT"
 
-    - name: Setup .NET SDK
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: ${{ inputs.dotnet_version }}
-        dotnet-install-dir: ${{ steps.paths.outputs.dotnet_install_dir }}
+    - name: Configure .NET path
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "DOTNET_ROOT=${{ steps.paths.outputs.dotnet_root }}" >> "$GITHUB_ENV"
+        echo "${{ steps.paths.outputs.dotnet_root }}" >> "$GITHUB_PATH"
 
     - name: Resolve topology path
       id: topology
