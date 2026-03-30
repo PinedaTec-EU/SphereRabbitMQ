@@ -25,8 +25,14 @@ internal static class CommandOutputRenderer
     internal static string RenderApply(ApplyCommandResult result)
     {
         var builder = new StringBuilder();
-        builder.AppendLine(result.DryRun ? "Dry-run apply completed." : "Apply completed.");
-        AppendPlanBody(builder, result.Broker, result.Validation, result.Plan, result.BlockingChanges, "Execution plan:");
+        builder.AppendLine(RenderApplyStatus(result));
+        AppendPlanBody(builder, result.Broker, result.Validation, result.Plan, result.BlockingChanges, RenderApplyHeading(result));
+
+        if (result.Validation.IsValid)
+        {
+            AppendApplySummary(builder, result);
+        }
+
         return builder.ToString().TrimEnd();
     }
 
@@ -53,6 +59,7 @@ internal static class CommandOutputRenderer
         }
 
         AppendBlockingChanges(builder, result.BlockingChanges);
+        AppendPlanSummary(builder, "Destroy summary:", result.Plan);
 
         return builder.ToString().TrimEnd();
     }
@@ -76,6 +83,8 @@ internal static class CommandOutputRenderer
         {
             builder.AppendLine($"- {queue.ResourcePath}");
         }
+
+        builder.AppendLine($"{(result.DryRun ? "Dry-run purge summary:" : "Purge summary:")} queues: {result.Queues.Count}.");
 
         return builder.ToString().TrimEnd();
     }
@@ -120,6 +129,67 @@ internal static class CommandOutputRenderer
         }
 
         AppendBlockingChanges(builder, blockingChanges);
+    }
+
+    private static void AppendPlanSummary(
+        StringBuilder builder,
+        string heading,
+        TopologyPlan plan)
+    {
+        var counts = plan.Operations
+            .GroupBy(operation => operation.Kind)
+            .ToDictionary(group => group.Key, group => group.Count());
+
+        builder.AppendLine(
+            $"{heading} noop: {GetCount(TopologyPlanOperationKind.NoOp)}, create: {GetCount(TopologyPlanOperationKind.Create)}, update: {GetCount(TopologyPlanOperationKind.Update)}, destroy: {GetCount(TopologyPlanOperationKind.Destroy)}, destructive: {GetCount(TopologyPlanOperationKind.DestructiveChange)}, unsupported: {GetCount(TopologyPlanOperationKind.UnsupportedChange)}.");
+        return;
+
+        int GetCount(TopologyPlanOperationKind kind)
+            => counts.TryGetValue(kind, out var count) ? count : 0;
+    }
+
+    private static void AppendApplySummary(
+        StringBuilder builder,
+        ApplyCommandResult result)
+    {
+        var counts = result.Plan.Operations
+            .GroupBy(operation => operation.Kind)
+            .ToDictionary(group => group.Key, group => group.Count());
+        var isPreview = result.DryRun || !result.Executed;
+
+        builder.AppendLine(
+            isPreview
+                ? $"Plan summary: noop: {GetCount(TopologyPlanOperationKind.NoOp)}, would-create: {GetCount(TopologyPlanOperationKind.Create)}, would-update: {GetCount(TopologyPlanOperationKind.Update)}, would-destroy: {GetCount(TopologyPlanOperationKind.Destroy)}, blocking-destructive: {GetCount(TopologyPlanOperationKind.DestructiveChange)}, blocking-unsupported: {GetCount(TopologyPlanOperationKind.UnsupportedChange)}."
+                : $"Apply result: noop: {GetCount(TopologyPlanOperationKind.NoOp)}, created: {GetCount(TopologyPlanOperationKind.Create)}, updated: {GetCount(TopologyPlanOperationKind.Update)}, destroyed: {GetCount(TopologyPlanOperationKind.Destroy)}, blocking-destructive: {GetCount(TopologyPlanOperationKind.DestructiveChange)}, blocking-unsupported: {GetCount(TopologyPlanOperationKind.UnsupportedChange)}.");
+        return;
+
+        int GetCount(TopologyPlanOperationKind kind)
+            => counts.TryGetValue(kind, out var count) ? count : 0;
+    }
+
+    private static string RenderApplyStatus(ApplyCommandResult result)
+    {
+        if (!result.Validation.IsValid)
+        {
+            return result.DryRun ? "Dry-run apply validation failed." : "Apply validation failed.";
+        }
+
+        if (result.DryRun)
+        {
+            return "Dry-run apply completed.";
+        }
+
+        return result.Executed ? "Apply completed." : "Apply blocked.";
+    }
+
+    private static string RenderApplyHeading(ApplyCommandResult result)
+    {
+        if (result.DryRun || !result.Executed)
+        {
+            return "Planned operations:";
+        }
+
+        return "Applied operations:";
     }
 
     private static void AppendBroker(StringBuilder builder, BrokerResolutionResult broker)

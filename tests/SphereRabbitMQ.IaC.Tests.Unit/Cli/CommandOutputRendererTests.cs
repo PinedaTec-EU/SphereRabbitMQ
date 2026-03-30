@@ -40,6 +40,7 @@ public sealed class CommandOutputRendererTests
     {
         var result = new ApplyCommandResult(
             false,
+            false,
             CreateBroker(),
             new TopologyValidationResult(Array.Empty<TopologyIssue>()),
             new TopologyPlan(
@@ -58,11 +59,41 @@ public sealed class CommandOutputRendererTests
 
         var text = CommandOutputRenderer.RenderApply(result);
 
-        Assert.Contains("Apply completed.", text, StringComparison.Ordinal);
-        Assert.Contains("Execution plan:", text, StringComparison.Ordinal);
+        Assert.Contains("Apply blocked.", text, StringComparison.Ordinal);
+        Assert.Contains("Planned operations:", text, StringComparison.Ordinal);
         Assert.DoesNotContain("\nPlan:\n", text, StringComparison.Ordinal);
         Assert.Contains("[unsupported] /virtualHosts/sales/exchanges/orders", text, StringComparison.Ordinal);
         Assert.Contains("diff type: desired=Topic actual=Direct", text, StringComparison.Ordinal);
+        Assert.Contains("Plan summary: noop: 0, would-create: 0, would-update: 0, would-destroy: 0, blocking-destructive: 0, blocking-unsupported: 1.", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderApply_WhenExecuted_UsesPastTenseSummary()
+    {
+        var result = new ApplyCommandResult(
+            false,
+            true,
+            CreateBroker(),
+            TopologyValidationResult.Success,
+            new TopologyPlan(
+            [
+                new TopologyPlanOperation(
+                    TopologyPlanOperationKind.Create,
+                    TopologyResourceKind.Queue,
+                    "/virtualHosts/sales/queues/orders",
+                    "Create queue."),
+                new TopologyPlanOperation(
+                    TopologyPlanOperationKind.Update,
+                    TopologyResourceKind.Binding,
+                    "/virtualHosts/sales/bindings/orders|Queue|orders|orders.*",
+                    "Update binding."),
+            ]));
+
+        var text = CommandOutputRenderer.RenderApply(result);
+
+        Assert.Contains("Apply completed.", text, StringComparison.Ordinal);
+        Assert.Contains("Applied operations:", text, StringComparison.Ordinal);
+        Assert.Contains("Apply result: noop: 0, created: 1, updated: 1, destroyed: 0, blocking-destructive: 0, blocking-unsupported: 0.", text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -110,6 +141,7 @@ public sealed class CommandOutputRendererTests
         Assert.Contains("Queues to purge:", text, StringComparison.Ordinal);
         Assert.Contains("/virtualHosts/sales/queues/orders", text, StringComparison.Ordinal);
         Assert.Contains("/virtualHosts/sales/queues/orders.debug", text, StringComparison.Ordinal);
+        Assert.Contains("Purge summary: queues: 2.", text, StringComparison.Ordinal);
     }
 
     private static BrokerResolutionResult CreateBroker()

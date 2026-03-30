@@ -226,7 +226,7 @@ internal sealed class TopologyCommandHandler
             var brokerValidation = ValidateBrokerVirtualHostAlignment(broker, topologyDocument.VirtualHosts);
             if (!brokerValidation.IsValid)
             {
-                var invalidBrokerResult = new ApplyCommandResult(dryRun, broker, brokerValidation, CreateEmptyPlan());
+                var invalidBrokerResult = new ApplyCommandResult(dryRun, false, broker, brokerValidation, CreateEmptyPlan());
                 Write(outputFormat, invalidBrokerResult, CommandOutputRenderer.RenderApply(invalidBrokerResult));
                 return CommandExitCodes.ValidationFailed;
             }
@@ -239,21 +239,22 @@ internal sealed class TopologyCommandHandler
             using var runtimeServices = CreateRuntimeServices(broker.Options);
             var result = await BuildApplyPreviewResultAsync(broker, dryRun, runtimeServices, stream, cancellationToken);
 
-            Write(outputFormat, result, CommandOutputRenderer.RenderApply(result));
-
             if (!result.Validation.IsValid)
             {
+                Write(outputFormat, result, CommandOutputRenderer.RenderApply(result));
                 return CommandExitCodes.ValidationFailed;
             }
 
             if ((!result.Plan.CanApply || result.Plan.DestructiveChanges.Count > 0) && (!migrate || dryRun))
             {
                 WriteVerbose(outputFormat, verbose, "Blocking plan operations detected.");
+                Write(outputFormat, result, CommandOutputRenderer.RenderApply(result));
                 return CommandExitCodes.UnsupportedPlan;
             }
 
             if (dryRun)
             {
+                Write(outputFormat, result, CommandOutputRenderer.RenderApply(result));
                 return CommandExitCodes.Success;
             }
 
@@ -265,12 +266,15 @@ internal sealed class TopologyCommandHandler
                 stream,
                 migrate ? new TopologyApplyOptions { AllowMigrations = true } : TopologyApplyOptions.Safe,
                 cancellationToken);
+            var completedResult = result with { Executed = true };
+            Write(outputFormat, completedResult, CommandOutputRenderer.RenderApply(completedResult));
             return CommandExitCodes.Success;
         }
         catch (TopologyNormalizationException exception)
         {
             var result = new ApplyCommandResult(
                 dryRun,
+                false,
                 CreateFailureBrokerResolutionResult(),
                 new Domain.Topology.TopologyValidationResult(exception.Issues),
                 new Domain.Planning.TopologyPlan(Array.Empty<Domain.Planning.TopologyPlanOperation>()));
@@ -513,7 +517,7 @@ internal sealed class TopologyCommandHandler
         CancellationToken cancellationToken)
     {
         var (_, validation, plan) = await runtimeServices.TopologyWorkflowService.PlanAsync(stream, cancellationToken);
-        return new ApplyCommandResult(dryRun, broker, validation, plan);
+        return new ApplyCommandResult(dryRun, false, broker, validation, plan);
     }
 
     private static async Task<DestroyCommandResult> BuildDestroyDryRunResultAsync(
