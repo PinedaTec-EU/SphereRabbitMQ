@@ -3,9 +3,16 @@
   "isRoot": true,
   "tools": {
     "pinedatec.versionbumper": {
-      "version": "1.0.0.4",
+      "version": "1.0.0.13",
       "commands": [
         "versionbumper"
+      ],
+      "rollForward": false
+    },
+    "dotnet-outdated-tool": {
+      "version": "4.7.1",
+      "commands": [
+        "dotnet-outdated"
       ],
       "rollForward": false
     }
