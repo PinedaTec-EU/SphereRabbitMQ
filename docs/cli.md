@@ -94,6 +94,7 @@ Shared inputs:
 Additional destructive-action input:
 
 - `dry_run` optional, default `false`
+- `purge_debug_queues` optional, default `false`; when `true`, the action passes `--debug-only` and purges only generated debug queues
 
 The action uses the same broker resolution as the CLI, so workflows can pass environment variables such as:
 
@@ -170,6 +171,7 @@ jobs:
           topology_file: infra/rabbitmq/topology.yaml
           dotnet_root: ${{ env.DOTNET_ROOT }}
           dry_run: "true"
+          purge_debug_queues: "true"
         env:
           SPHERE_RABBITMQ_MANAGEMENT_URL: ${{ secrets.SPHERE_RABBITMQ_MANAGEMENT_URL }}
           SPHERE_RABBITMQ_USERNAME: ${{ secrets.SPHERE_RABBITMQ_USERNAME }}
