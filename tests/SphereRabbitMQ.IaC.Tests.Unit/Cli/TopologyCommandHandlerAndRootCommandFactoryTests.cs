@@ -415,7 +415,7 @@ public sealed class TopologyRootCommandFactoryTests
         var rootCommand = TopologyRootCommandFactory.Create(services);
 
         Assert.Equal(["init", "validate", "plan", "apply", "purge", "destroy", "export", "completion"], rootCommand.Subcommands.Select(command => command.Name).ToArray());
-        Assert.True(GetCommand(rootCommand, "validate").Options.OfType<Option<string>>().Single(option => option.Name == "file").IsRequired);
+        Assert.True(GetCommand(rootCommand, "validate").Options.OfType<Option<string>>().Single(option => option.Name == "file").Required);
         Assert.Contains(GetCommand(rootCommand, "apply").Options, option => option.Name == "migrate");
         Assert.Contains(GetCommand(rootCommand, "destroy").Options, option => option.Name == "allow-destructive");
         Assert.Contains(GetCommand(rootCommand, "destroy").Options, option => option.Name == "auto-approve");
@@ -463,7 +463,7 @@ public sealed class TopologyRootCommandFactoryTests
             .BuildServiceProvider();
 
         var rootCommand = TopologyRootCommandFactory.Create(services);
-        var exitCode = await rootCommand.InvokeAsync([
+        var exitCode = await rootCommand.Parse([
             "export",
             "--management-url", "http://rabbit:15672/api/",
             "--username", "cli-user",
@@ -472,7 +472,7 @@ public sealed class TopologyRootCommandFactoryTests
             "--vhost", "ops",
             "--output", "json",
             "--output-file", "-",
-        ]);
+        ]).InvokeAsync();
 
         Assert.Equal(CommandExitCodes.Success, exitCode);
         runtimeFactoryMock.VerifyAll();
@@ -520,7 +520,7 @@ public sealed class TopologyRootCommandFactoryTests
             .BuildServiceProvider();
 
         var rootCommand = TopologyRootCommandFactory.Create(services);
-        var exitCode = await rootCommand.InvokeAsync([
+        var exitCode = await rootCommand.Parse([
             "export",
             "--management-url", "http://rabbit:15672/api/",
             "--username", "cli-user",
@@ -528,7 +528,7 @@ public sealed class TopologyRootCommandFactoryTests
             "--vhost", "sales",
             "--include-broker",
             "--output-file", "-",
-        ]);
+        ]).InvokeAsync();
 
         Assert.Equal(CommandExitCodes.Success, exitCode);
         topologyDocumentWriterMock.VerifyAll();
@@ -549,7 +549,7 @@ public sealed class TopologyRootCommandFactoryTests
             .BuildServiceProvider();
 
         var rootCommand = TopologyRootCommandFactory.Create(services);
-        var exitCode = await rootCommand.InvokeAsync(["completion", "zsh"]);
+        var exitCode = await rootCommand.Parse(["completion", "zsh"]).InvokeAsync();
 
         Assert.Equal(CommandExitCodes.Success, exitCode);
         outputWriterMock.Verify(writer => writer.WriteText(It.Is<string>(text =>
@@ -576,11 +576,11 @@ public sealed class TopologyRootCommandFactoryTests
                 .BuildServiceProvider();
 
             var rootCommand = TopologyRootCommandFactory.Create(services);
-            var exitCode = await rootCommand.InvokeAsync([
+            var exitCode = await rootCommand.Parse([
                 "init",
                 "--template", "minimal",
                 "--output-file", outputPath,
-            ]);
+            ]).InvokeAsync();
 
             Assert.Equal(CommandExitCodes.Success, exitCode);
             Assert.Equal("virtualHosts:\n  - name: sales\n", await File.ReadAllTextAsync(outputPath));
@@ -628,12 +628,12 @@ public sealed class TopologyRootCommandFactoryTests
                 .BuildServiceProvider();
 
             var rootCommand = TopologyRootCommandFactory.Create(services);
-            var exitCode = await rootCommand.InvokeAsync([
+            var exitCode = await rootCommand.Parse([
                 "validate",
                 "--file", filePath,
                 "--output", "json",
                 "--verbose",
-            ]);
+            ]).InvokeAsync();
 
             Assert.Equal(CommandExitCodes.Success, exitCode);
             outputWriterMock.Verify(writer => writer.WriteJson(It.IsAny<ValidateCommandResult>()), Times.Once);
@@ -692,7 +692,7 @@ public sealed class TopologyRootCommandFactoryTests
                 .BuildServiceProvider();
 
             var rootCommand = TopologyRootCommandFactory.Create(services);
-            var exitCode = await rootCommand.InvokeAsync([
+            var exitCode = await rootCommand.Parse([
                 "plan",
                 "--file", filePath,
                 "--management-url", "http://rabbit:15672/api/",
@@ -700,7 +700,7 @@ public sealed class TopologyRootCommandFactoryTests
                 "--password", "cli-pass",
                 "--vhost", "sales",
                 "--vhost", "ops",
-            ]);
+            ]).InvokeAsync();
 
             Assert.Equal(CommandExitCodes.Success, exitCode);
             runtimeFactoryMock.VerifyAll();
@@ -772,11 +772,11 @@ public sealed class TopologyRootCommandFactoryTests
                 .BuildServiceProvider();
 
             var rootCommand = TopologyRootCommandFactory.Create(services);
-            var exitCode = await rootCommand.InvokeAsync([
+            var exitCode = await rootCommand.Parse([
                 "apply",
                 "--file", filePath,
                 "--migrate",
-            ]);
+            ]).InvokeAsync();
 
             Assert.Equal(CommandExitCodes.Success, exitCode);
             workflowMock.Verify(service => service.ApplyAsync(
@@ -836,11 +836,11 @@ public sealed class TopologyRootCommandFactoryTests
                 .BuildServiceProvider();
 
             var rootCommand = TopologyRootCommandFactory.Create(services);
-            var exitCode = await rootCommand.InvokeAsync([
+            var exitCode = await rootCommand.Parse([
                 "destroy",
                 "--file", filePath,
                 "--allow-destructive",
-            ]);
+            ]).InvokeAsync();
 
             Assert.Equal(CommandExitCodes.Success, exitCode);
             workflowMock.Verify(service => service.DestroyAsync(It.IsAny<Stream>(), true, It.IsAny<CancellationToken>()), Times.Once);
@@ -931,11 +931,11 @@ public sealed class TopologyRootCommandFactoryTests
                 .BuildServiceProvider();
 
             var rootCommand = TopologyRootCommandFactory.Create(services);
-            var exitCode = await rootCommand.InvokeAsync([
+            var exitCode = await rootCommand.Parse([
                 "purge",
                 "--file", filePath,
                 "--allow-destructive",
-            ]);
+            ]).InvokeAsync();
 
             Assert.Equal(CommandExitCodes.Success, exitCode);
             apiClientMock.Verify(client => client.PurgeQueueAsync("sales", "orders", It.IsAny<CancellationToken>()), Times.Once);
@@ -1027,12 +1027,12 @@ public sealed class TopologyRootCommandFactoryTests
                 .BuildServiceProvider();
 
             var rootCommand = TopologyRootCommandFactory.Create(services);
-            var exitCode = await rootCommand.InvokeAsync([
+            var exitCode = await rootCommand.Parse([
                 "purge",
                 "--file", filePath,
                 "--allow-destructive",
                 "--debug-only",
-            ]);
+            ]).InvokeAsync();
 
             Assert.Equal(CommandExitCodes.Success, exitCode);
             apiClientMock.Verify(client => client.PurgeQueueAsync("sales", "orders", It.IsAny<CancellationToken>()), Times.Never);
@@ -1087,12 +1087,12 @@ public sealed class TopologyRootCommandFactoryTests
                 .BuildServiceProvider();
 
             var rootCommand = TopologyRootCommandFactory.Create(services);
-            var exitCode = await rootCommand.InvokeAsync([
+            var exitCode = await rootCommand.Parse([
                 "destroy",
                 "--file", filePath,
                 "--allow-destructive",
                 "--auto-approve",
-            ]);
+            ]).InvokeAsync();
 
             Assert.Equal(CommandExitCodes.Success, exitCode);
             destructivePrompterMock.Verify(prompter => prompter.ConfirmAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
