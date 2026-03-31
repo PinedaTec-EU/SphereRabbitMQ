@@ -70,11 +70,13 @@ internal static class TopologyRootCommandFactory
         """;
     private const string PurgeDescription = """
         Remove all messages from every queue declared by the normalized topology.
-        Generated retry, dead-letter, and debug queues are included when present in the YAML.
+        By default this includes declared queues plus generated retry, dead-letter, and debug queues.
+        Use --debug-only to purge only generated debug queues.
         Non-dry execution requires --allow-destructive and asks for confirmation unless --auto-approve is used.
 
         Examples:
           sprmq purge --file samples/minimal-topology.yaml --dry-run
+          sprmq purge --file samples/minimal-topology.yaml --dry-run --debug-only
           sprmq purge --file samples/minimal-topology.yaml --allow-destructive --auto-approve
         """;
     private const string ExportDescription = """
@@ -110,6 +112,7 @@ internal static class TopologyRootCommandFactory
         var verboseOption = new Option<bool>("--verbose", () => false, "Print detailed execution phases and broker operations.");
         var allowDestructiveOption = new Option<bool>("--allow-destructive", () => false, "Allow destructive execution for commands that delete broker resources.");
         var autoApproveOption = new Option<bool>("--auto-approve", () => false, "Skip the interactive confirmation prompt for destructive commands.");
+        var debugOnlyOption = new Option<bool>("--debug-only", () => false, "Purge only generated debug queues.");
         var exportOutputPathOption = new Option<string>("--output-file", () => "-", "Output file path for export. Use '-' to write YAML to stdout.");
         var exportFileOption = new Option<string?>("--file", "Optional topology YAML file used as a source for broker connection settings.");
         var includeBrokerOption = new Option<bool>("--include-broker", () => false, "Include the resolved broker settings in the exported YAML.");
@@ -255,6 +258,7 @@ internal static class TopologyRootCommandFactory
         purgeCommand.AddOption(verboseOption);
         purgeCommand.AddOption(allowDestructiveOption);
         purgeCommand.AddOption(autoApproveOption);
+        purgeCommand.AddOption(debugOnlyOption);
         Handler.SetHandler(purgeCommand, async (InvocationContext context) =>
         {
             var parseResult = context.ParseResult;
@@ -267,6 +271,7 @@ internal static class TopologyRootCommandFactory
                 parseResult.GetValueForOption(verboseOption),
                 parseResult.GetValueForOption(allowDestructiveOption),
                 parseResult.GetValueForOption(autoApproveOption),
+                parseResult.GetValueForOption(debugOnlyOption),
                 cancellationToken);
             context.ExitCode = exitCode;
         });

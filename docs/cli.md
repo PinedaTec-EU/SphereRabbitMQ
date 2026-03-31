@@ -286,18 +286,20 @@ That includes:
 - declared queues
 - generated retry queues
 - generated dead-letter queues
-- generated debug queues when `debugQueues` is enabled and the YAML marks artifacts for debug queue generation
+- generated debug queues
 
 Execution rules:
 
 - requires `--allow-destructive` for non-dry execution
 - asks for interactive confirmation before executing
+- use `--debug-only` to limit the purge to generated debug queues
 - use `--auto-approve` to skip the confirmation prompt in automation or CI
 
 Examples:
 
 ```bash
 sprmq purge --file samples/minimal-topology.yaml --dry-run
+sprmq purge --file samples/minimal-topology.yaml --dry-run --debug-only
 sprmq purge --file samples/minimal-topology.yaml --allow-destructive
 sprmq purge --file samples/minimal-topology.yaml --allow-destructive --auto-approve
 ```

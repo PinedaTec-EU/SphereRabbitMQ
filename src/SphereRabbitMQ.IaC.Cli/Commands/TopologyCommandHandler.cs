@@ -31,6 +31,7 @@ internal sealed class TopologyCommandHandler
     private const string VirtualHostsEnvironmentVariable = "SPHERE_RABBITMQ_VHOSTS";
     private const string JsonOutputPath = "-";
     private const string UsernameEnvironmentVariable = "SPHERE_RABBITMQ_USERNAME";
+    private const string GeneratedMetadataKey = "generated-by";
 
     private readonly ITopologyParser _topologyParser;
     private readonly ITopologyNormalizer _topologyNormalizer;
@@ -431,6 +432,7 @@ internal sealed class TopologyCommandHandler
         bool verbose,
         bool allowDestructive,
         bool autoApprove,
+        bool debugOnly,
         CancellationToken cancellationToken)
     {
         WriteStartup(outputFormat);
@@ -466,7 +468,11 @@ internal sealed class TopologyCommandHandler
                 return CommandExitCodes.ValidationFailed;
             }
 
-            var result = new PurgeCommandResult(dryRun, broker, validation, CreatePurgeQueueResults(definition));
+            var result = new PurgeCommandResult(
+                dryRun,
+                broker,
+                validation,
+                CreatePurgeQueueResults(definition, topologyDocument.DebugQueues, debugOnly));
             WriteConnection(outputFormat, broker);
 
             if (!validation.IsValid)
@@ -681,16 +687,38 @@ internal sealed class TopologyCommandHandler
             BrokerOptionSource.Default,
             new BrokerOptionValue<IReadOnlyList<string>>(Array.Empty<string>(), BrokerOptionSource.Default));
 
-    private static IReadOnlyList<PurgeQueueResult> CreatePurgeQueueResults(TopologyDefinition definition)
+    private static IReadOnlyList<PurgeQueueResult> CreatePurgeQueueResults(
+        TopologyDefinition definition,
+        Application.Models.DebugQueuesDocument? debugQueues,
+        bool debugOnly)
         => definition.VirtualHosts
             .SelectMany(
-                virtualHost => virtualHost.Queues.Select(
+                virtualHost => virtualHost.Queues
+                    .Where(queue => !debugOnly || IsGeneratedDebugQueue(queue, debugQueues))
+                    .Select(
                     queue => new PurgeQueueResult(
                         virtualHost.Name,
                         queue.Name,
                         $"/virtualHosts/{virtualHost.Name}/queues/{queue.Name}")))
             .OrderBy(queue => queue.ResourcePath, StringComparer.Ordinal)
             .ToArray();
+
+    private static bool IsGeneratedDebugQueue(
+        QueueDefinition queue,
+        Application.Models.DebugQueuesDocument? debugQueues)
+    {
+        if (debugQueues is not { Enabled: true })
+        {
+            return false;
+        }
+
+        var suffix = string.IsNullOrWhiteSpace(debugQueues.QueueSuffix)
+            ? ".debug"
+            : $".{debugQueues.QueueSuffix.Trim()}";
+
+        return queue.Metadata.ContainsKey(GeneratedMetadataKey) &&
+            queue.Name.EndsWith(suffix, StringComparison.Ordinal);
+    }
 
     private static TopologyPlan CreateEmptyPlan()
         => new(Array.Empty<TopologyPlanOperation>());

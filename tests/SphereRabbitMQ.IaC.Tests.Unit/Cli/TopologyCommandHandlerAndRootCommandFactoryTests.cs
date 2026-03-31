@@ -422,6 +422,7 @@ public sealed class TopologyRootCommandFactoryTests
         Assert.DoesNotContain(GetCommand(rootCommand, "destroy").Options, option => option.Name == "destroy-vhost");
         Assert.Contains(GetCommand(rootCommand, "purge").Options, option => option.Name == "allow-destructive");
         Assert.Contains(GetCommand(rootCommand, "purge").Options, option => option.Name == "auto-approve");
+        Assert.Contains(GetCommand(rootCommand, "purge").Options, option => option.Name == "debug-only");
         Assert.Contains(GetCommand(rootCommand, "export").Options, option => option.Name == "output-file");
         Assert.Contains(GetCommand(rootCommand, "export").Options, option => option.Name == "include-broker");
     }
@@ -851,7 +852,7 @@ public sealed class TopologyRootCommandFactoryTests
     }
 
     [Fact]
-    public async Task Create_InvokedPurgeCommand_PurgesNormalizedQueues()
+    public async Task Create_InvokedPurgeCommand_WithoutDebugOnly_PurgesAllNormalizedQueues()
     {
         var parserMock = new Mock<ITopologyParser>(MockBehavior.Strict);
         var normalizerMock = new Mock<ITopologyNormalizer>(MockBehavior.Strict);
@@ -869,6 +870,10 @@ public sealed class TopologyRootCommandFactoryTests
 
             var topologyDocument = new TopologyDocument
             {
+                DebugQueues = new DebugQueuesDocument
+                {
+                    Enabled = true,
+                },
                 VirtualHosts = [new VirtualHostDocument { Name = "sales" }],
             };
             var topologyDefinition = new TopologyDefinition(
@@ -878,7 +883,12 @@ public sealed class TopologyRootCommandFactoryTests
                     Array.Empty<ExchangeDefinition>(),
                     [
                         new QueueDefinition("orders"),
-                        new QueueDefinition("orders.debug"),
+                        new QueueDefinition(
+                            "orders.debug",
+                            metadata: new Dictionary<string, string>(StringComparer.Ordinal)
+                            {
+                                ["generated-by"] = "SphereRabbitMQ.IaC",
+                            }),
                     ],
                     Array.Empty<BindingDefinition>()),
             ]);
@@ -929,6 +939,103 @@ public sealed class TopologyRootCommandFactoryTests
 
             Assert.Equal(CommandExitCodes.Success, exitCode);
             apiClientMock.Verify(client => client.PurgeQueueAsync("sales", "orders", It.IsAny<CancellationToken>()), Times.Once);
+            apiClientMock.Verify(client => client.PurgeQueueAsync("sales", "orders.debug", It.IsAny<CancellationToken>()), Times.Once);
+        }
+        finally
+        {
+            File.Delete(filePath);
+        }
+    }
+
+    [Fact]
+    public async Task Create_InvokedPurgeCommand_PurgesNormalizedQueues_WhenDebugOnlyIsSpecified()
+    {
+        var parserMock = new Mock<ITopologyParser>(MockBehavior.Strict);
+        var normalizerMock = new Mock<ITopologyNormalizer>(MockBehavior.Strict);
+        var validatorMock = new Mock<ITopologyValidator>(MockBehavior.Strict);
+        var runtimeFactoryMock = new Mock<IRabbitMqRuntimeServiceFactory>(MockBehavior.Strict);
+        var outputWriterMock = new Mock<ICommandOutputWriter>(MockBehavior.Strict);
+        var apiClientMock = new Mock<IRabbitMqManagementApiClient>(MockBehavior.Strict);
+        var destructivePrompterMock = new Mock<IDestructiveCommandPrompter>(MockBehavior.Strict);
+
+        var filePath = Path.GetTempFileName();
+
+        try
+        {
+            await File.WriteAllTextAsync(filePath, "topology: ignored");
+
+            var topologyDocument = new TopologyDocument
+            {
+                DebugQueues = new DebugQueuesDocument
+                {
+                    Enabled = true,
+                },
+                VirtualHosts = [new VirtualHostDocument { Name = "sales" }],
+            };
+            var topologyDefinition = new TopologyDefinition(
+            [
+                new VirtualHostDefinition(
+                    "sales",
+                    Array.Empty<ExchangeDefinition>(),
+                    [
+                        new QueueDefinition("orders"),
+                        new QueueDefinition(
+                            "orders.debug",
+                            metadata: new Dictionary<string, string>(StringComparer.Ordinal)
+                            {
+                                ["generated-by"] = "SphereRabbitMQ.IaC",
+                            }),
+                    ],
+                    Array.Empty<BindingDefinition>()),
+            ]);
+
+            parserMock.Setup(parser => parser.ParseAsync(It.IsAny<Stream>(), It.IsAny<CancellationToken>())).ReturnsAsync(topologyDocument);
+            normalizerMock.Setup(normalizer => normalizer.NormalizeAsync(topologyDocument, It.IsAny<CancellationToken>())).ReturnsAsync(topologyDefinition);
+            validatorMock.Setup(validator => validator.ValidateAsync(topologyDefinition, It.IsAny<CancellationToken>())).ReturnsAsync(TopologyValidationResult.Success);
+            apiClientMock.Setup(client => client.PurgeQueueAsync("sales", "orders", It.IsAny<CancellationToken>())).Returns(ValueTask.CompletedTask);
+            apiClientMock.Setup(client => client.PurgeQueueAsync("sales", "orders.debug", It.IsAny<CancellationToken>())).Returns(ValueTask.CompletedTask);
+            runtimeFactoryMock
+                .Setup(factory => factory.Create(It.IsAny<RabbitMqManagementOptions>()))
+                .Returns(new RabbitMqRuntimeServices(
+                    new HttpClient(),
+                    new RabbitMqManagementOptions
+                    {
+                        BaseUri = new Uri("http://localhost:15672/api/"),
+                        Username = "guest",
+                        Password = "guest",
+                    },
+                    apiClientMock.Object,
+                    Mock.Of<global::SphereRabbitMQ.IaC.Application.Broker.Interfaces.IBrokerTopologyReader>(),
+                    Mock.Of<global::SphereRabbitMQ.IaC.Application.Apply.Interfaces.ITopologyApplier>(),
+                    Mock.Of<global::SphereRabbitMQ.IaC.Application.Export.Interfaces.ITopologyExporter>(),
+                    Mock.Of<ITopologyWorkflowService>()));
+            outputWriterMock.Setup(writer => writer.WriteText(It.IsAny<string>()));
+            destructivePrompterMock
+                .Setup(prompter => prompter.ConfirmAsync("purge", It.IsAny<CancellationToken>()))
+                .ReturnsAsync(true);
+
+            using var services = new ServiceCollection()
+                .AddSingleton<ITopologyTemplateCatalog>(CreateTemplateCatalog())
+                .AddSingleton(CreateHandler(
+                    parserMock.Object,
+                    normalizerMock.Object,
+                    validatorMock.Object,
+                    runtimeFactoryMock.Object,
+                    Mock.Of<ITopologyDocumentWriter>(),
+                    outputWriterMock.Object,
+                    destructiveCommandPrompter: destructivePrompterMock.Object))
+                .BuildServiceProvider();
+
+            var rootCommand = TopologyRootCommandFactory.Create(services);
+            var exitCode = await rootCommand.InvokeAsync([
+                "purge",
+                "--file", filePath,
+                "--allow-destructive",
+                "--debug-only",
+            ]);
+
+            Assert.Equal(CommandExitCodes.Success, exitCode);
+            apiClientMock.Verify(client => client.PurgeQueueAsync("sales", "orders", It.IsAny<CancellationToken>()), Times.Never);
             apiClientMock.Verify(client => client.PurgeQueueAsync("sales", "orders.debug", It.IsAny<CancellationToken>()), Times.Once);
         }
         finally

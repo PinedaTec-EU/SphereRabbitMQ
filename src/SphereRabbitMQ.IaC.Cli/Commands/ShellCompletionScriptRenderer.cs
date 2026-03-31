@@ -11,7 +11,7 @@ internal static class ShellCompletionScriptRenderer
         ["plan"] = ["--file", "--output", "--management-url", "--username", "--password", "--vhost", "--verbose"],
         ["apply"] = ["--file", "--output", "--management-url", "--username", "--password", "--vhost", "--dry-run", "--migrate", "--verbose"],
         ["destroy"] = ["--file", "--output", "--management-url", "--username", "--password", "--vhost", "--dry-run", "--verbose", "--allow-destructive", "--auto-approve"],
-        ["purge"] = ["--file", "--output", "--management-url", "--username", "--password", "--vhost", "--dry-run", "--verbose", "--allow-destructive", "--auto-approve"],
+        ["purge"] = ["--file", "--output", "--management-url", "--username", "--password", "--vhost", "--dry-run", "--verbose", "--allow-destructive", "--auto-approve", "--debug-only"],
         ["export"] = ["--file", "--output", "--management-url", "--username", "--password", "--vhost", "--output-file", "--include-broker", "--verbose"],
         ["completion"] = [],
     };
