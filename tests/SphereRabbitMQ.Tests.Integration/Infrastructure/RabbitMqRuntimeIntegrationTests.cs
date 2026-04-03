@@ -405,7 +405,7 @@ public sealed class RabbitMqRuntimeIntegrationTests
         var publisher = provider.GetRequiredService<IRabbitMQPublisher>();
         await PurgeQueuesAsync("orders.created", "orders.created.high", "orders.created.low", "orders.created.multi");
 
-        await Assert.ThrowsAsync<PublishException>(() =>
+        await Assert.ThrowsAsync<PublishReturnException>(() =>
             publisher.PublishAsync("orders", "orders.created.invalid", new OrderCreated("missing-route")));
         await Task.Delay(500);
 

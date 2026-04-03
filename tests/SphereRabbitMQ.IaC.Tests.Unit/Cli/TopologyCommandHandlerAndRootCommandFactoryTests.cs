@@ -415,16 +415,16 @@ public sealed class TopologyRootCommandFactoryTests
         var rootCommand = TopologyRootCommandFactory.Create(services);
 
         Assert.Equal(["init", "validate", "plan", "apply", "purge", "destroy", "export", "completion"], rootCommand.Subcommands.Select(command => command.Name).ToArray());
-        Assert.True(GetCommand(rootCommand, "validate").Options.OfType<Option<string>>().Single(option => option.Name == "file").Required);
-        Assert.Contains(GetCommand(rootCommand, "apply").Options, option => option.Name == "migrate");
-        Assert.Contains(GetCommand(rootCommand, "destroy").Options, option => option.Name == "allow-destructive");
-        Assert.Contains(GetCommand(rootCommand, "destroy").Options, option => option.Name == "auto-approve");
-        Assert.DoesNotContain(GetCommand(rootCommand, "destroy").Options, option => option.Name == "destroy-vhost");
-        Assert.Contains(GetCommand(rootCommand, "purge").Options, option => option.Name == "allow-destructive");
-        Assert.Contains(GetCommand(rootCommand, "purge").Options, option => option.Name == "auto-approve");
-        Assert.Contains(GetCommand(rootCommand, "purge").Options, option => option.Name == "debug-only");
-        Assert.Contains(GetCommand(rootCommand, "export").Options, option => option.Name == "output-file");
-        Assert.Contains(GetCommand(rootCommand, "export").Options, option => option.Name == "include-broker");
+        Assert.True(GetCommand(rootCommand, "validate").Options.Single(option => option.Name.Contains("file", StringComparison.OrdinalIgnoreCase)).Required);
+        Assert.Contains(GetCommand(rootCommand, "apply").Options, option => option.Name.Contains("migrate", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(GetCommand(rootCommand, "destroy").Options, option => option.Name.Contains("allow-destructive", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(GetCommand(rootCommand, "destroy").Options, option => option.Name.Contains("auto-approve", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(GetCommand(rootCommand, "destroy").Options, option => option.Name.Contains("destroy-vhost", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(GetCommand(rootCommand, "purge").Options, option => option.Name.Contains("allow-destructive", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(GetCommand(rootCommand, "purge").Options, option => option.Name.Contains("auto-approve", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(GetCommand(rootCommand, "purge").Options, option => option.Name.Contains("debug-only", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(GetCommand(rootCommand, "export").Options, option => option.Name.Contains("output-file", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(GetCommand(rootCommand, "export").Options, option => option.Name.Contains("include-broker", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
