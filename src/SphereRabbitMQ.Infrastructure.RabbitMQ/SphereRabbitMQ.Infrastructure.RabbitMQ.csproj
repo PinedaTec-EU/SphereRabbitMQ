@@ -1,8 +1,9 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <AssemblyName>SphereRabbitMQ.Infrastructure.RabbitMQ</AssemblyName>
-    <ReleaseVersion>0.1.3.100</ReleaseVersion>
+    <ReleaseVersion>0.1.3.103</ReleaseVersion>
     <AssemblyVersion>$(ReleaseVersion)</AssemblyVersion>
     <FileVersion>$(ReleaseVersion)</FileVersion>
     <Version>$(ReleaseVersion)</Version>
@@ -10,14 +11,12 @@
     <Description>RabbitMQ adapters for the SphereRabbitMQ runtime messaging library.</Description>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
-
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Options" />
     <PackageReference Include="RabbitMQ.Client" />
   </ItemGroup>
-
   <ItemGroup>
     <ProjectReference Include="..\SphereRabbitMQ.Abstractions\SphereRabbitMQ.Abstractions.csproj" />
     <ProjectReference Include="..\SphereRabbitMQ.Application\SphereRabbitMQ.Application.csproj" />
