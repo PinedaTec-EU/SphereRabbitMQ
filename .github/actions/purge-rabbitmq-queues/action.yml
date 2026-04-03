@@ -15,7 +15,7 @@ inputs:
   tool_version:
     description: Version of sphererabbitmq.iac.tool to install when no local sprmq manifest entry is available.
     required: false
-    default: "1.1.4.122"
+    default: "1.1.4.123"
   dry_run:
     description: When true, runs purge in dry-run mode.
     required: false
