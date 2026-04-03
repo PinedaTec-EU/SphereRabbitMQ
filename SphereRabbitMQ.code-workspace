@@ -7,5 +7,7 @@
 			"path": "../ai-skills-shared"
 		}
 	],
-	"settings": {}
+	"settings": {
+		"editor.accessibilitySupport": "off"
+	}
 }
