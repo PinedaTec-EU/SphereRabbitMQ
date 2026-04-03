@@ -31,6 +31,7 @@ internal sealed class TopologyCommandHandler
     private const string VirtualHostsEnvironmentVariable = "SPHERE_RABBITMQ_VHOSTS";
     private const string JsonOutputPath = "-";
     private const string UsernameEnvironmentVariable = "SPHERE_RABBITMQ_USERNAME";
+    private const string GeneratedMetadataKey = "generated-by";
 
     private readonly ITopologyParser _topologyParser;
     private readonly ITopologyNormalizer _topologyNormalizer;
@@ -226,7 +227,7 @@ internal sealed class TopologyCommandHandler
             var brokerValidation = ValidateBrokerVirtualHostAlignment(broker, topologyDocument.VirtualHosts);
             if (!brokerValidation.IsValid)
             {
-                var invalidBrokerResult = new ApplyCommandResult(dryRun, broker, brokerValidation, CreateEmptyPlan());
+                var invalidBrokerResult = new ApplyCommandResult(dryRun, false, broker, brokerValidation, CreateEmptyPlan());
                 Write(outputFormat, invalidBrokerResult, CommandOutputRenderer.RenderApply(invalidBrokerResult));
                 return CommandExitCodes.ValidationFailed;
             }
@@ -239,21 +240,22 @@ internal sealed class TopologyCommandHandler
             using var runtimeServices = CreateRuntimeServices(broker.Options);
             var result = await BuildApplyPreviewResultAsync(broker, dryRun, runtimeServices, stream, cancellationToken);
 
-            Write(outputFormat, result, CommandOutputRenderer.RenderApply(result));
-
             if (!result.Validation.IsValid)
             {
+                Write(outputFormat, result, CommandOutputRenderer.RenderApply(result));
                 return CommandExitCodes.ValidationFailed;
             }
 
             if ((!result.Plan.CanApply || result.Plan.DestructiveChanges.Count > 0) && (!migrate || dryRun))
             {
                 WriteVerbose(outputFormat, verbose, "Blocking plan operations detected.");
+                Write(outputFormat, result, CommandOutputRenderer.RenderApply(result));
                 return CommandExitCodes.UnsupportedPlan;
             }
 
             if (dryRun)
             {
+                Write(outputFormat, result, CommandOutputRenderer.RenderApply(result));
                 return CommandExitCodes.Success;
             }
 
@@ -265,12 +267,15 @@ internal sealed class TopologyCommandHandler
                 stream,
                 migrate ? new TopologyApplyOptions { AllowMigrations = true } : TopologyApplyOptions.Safe,
                 cancellationToken);
+            var completedResult = result with { Executed = true };
+            Write(outputFormat, completedResult, CommandOutputRenderer.RenderApply(completedResult));
             return CommandExitCodes.Success;
         }
         catch (TopologyNormalizationException exception)
         {
             var result = new ApplyCommandResult(
                 dryRun,
+                false,
                 CreateFailureBrokerResolutionResult(),
                 new Domain.Topology.TopologyValidationResult(exception.Issues),
                 new Domain.Planning.TopologyPlan(Array.Empty<Domain.Planning.TopologyPlanOperation>()));
@@ -427,6 +432,7 @@ internal sealed class TopologyCommandHandler
         bool verbose,
         bool allowDestructive,
         bool autoApprove,
+        bool debugOnly,
         CancellationToken cancellationToken)
     {
         WriteStartup(outputFormat);
@@ -462,7 +468,11 @@ internal sealed class TopologyCommandHandler
                 return CommandExitCodes.ValidationFailed;
             }
 
-            var result = new PurgeCommandResult(dryRun, broker, validation, CreatePurgeQueueResults(definition));
+            var result = new PurgeCommandResult(
+                dryRun,
+                broker,
+                validation,
+                CreatePurgeQueueResults(definition, topologyDocument.DebugQueues, debugOnly));
             WriteConnection(outputFormat, broker);
 
             if (!validation.IsValid)
@@ -513,7 +523,7 @@ internal sealed class TopologyCommandHandler
         CancellationToken cancellationToken)
     {
         var (_, validation, plan) = await runtimeServices.TopologyWorkflowService.PlanAsync(stream, cancellationToken);
-        return new ApplyCommandResult(dryRun, broker, validation, plan);
+        return new ApplyCommandResult(dryRun, false, broker, validation, plan);
     }
 
     private static async Task<DestroyCommandResult> BuildDestroyDryRunResultAsync(
@@ -677,16 +687,38 @@ internal sealed class TopologyCommandHandler
             BrokerOptionSource.Default,
             new BrokerOptionValue<IReadOnlyList<string>>(Array.Empty<string>(), BrokerOptionSource.Default));
 
-    private static IReadOnlyList<PurgeQueueResult> CreatePurgeQueueResults(TopologyDefinition definition)
+    private static IReadOnlyList<PurgeQueueResult> CreatePurgeQueueResults(
+        TopologyDefinition definition,
+        Application.Models.DebugQueuesDocument? debugQueues,
+        bool debugOnly)
         => definition.VirtualHosts
             .SelectMany(
-                virtualHost => virtualHost.Queues.Select(
+                virtualHost => virtualHost.Queues
+                    .Where(queue => !debugOnly || IsGeneratedDebugQueue(queue, debugQueues))
+                    .Select(
                     queue => new PurgeQueueResult(
                         virtualHost.Name,
                         queue.Name,
                         $"/virtualHosts/{virtualHost.Name}/queues/{queue.Name}")))
             .OrderBy(queue => queue.ResourcePath, StringComparer.Ordinal)
             .ToArray();
+
+    private static bool IsGeneratedDebugQueue(
+        QueueDefinition queue,
+        Application.Models.DebugQueuesDocument? debugQueues)
+    {
+        if (debugQueues is not { Enabled: true })
+        {
+            return false;
+        }
+
+        var suffix = string.IsNullOrWhiteSpace(debugQueues.QueueSuffix)
+            ? ".debug"
+            : $".{debugQueues.QueueSuffix.Trim()}";
+
+        return queue.Metadata.ContainsKey(GeneratedMetadataKey) &&
+            queue.Name.EndsWith(suffix, StringComparison.Ordinal);
+    }
 
     private static TopologyPlan CreateEmptyPlan()
         => new(Array.Empty<TopologyPlanOperation>());

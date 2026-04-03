@@ -20,6 +20,10 @@ inputs:
     description: When true, runs purge in dry-run mode.
     required: false
     default: "false"
+  purge_debug_queues:
+    description: When true, purges only generated debug queues by passing --debug-only to sprmq.
+    required: false
+    default: "false"
 
 runs:
   using: composite
@@ -90,6 +94,9 @@ runs:
         EXTRA_ARGS="--allow-destructive --auto-approve"
         if [[ "${{ inputs.dry_run }}" == "true" ]]; then
           EXTRA_ARGS="$EXTRA_ARGS --dry-run"
+        fi
+        if [[ "${{ inputs.purge_debug_queues }}" == "true" ]]; then
+          EXTRA_ARGS="$EXTRA_ARGS --debug-only"
         fi
 
         echo "args=$EXTRA_ARGS" >> "$GITHUB_OUTPUT"

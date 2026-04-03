@@ -94,6 +94,7 @@ Shared inputs:
 Additional destructive-action input:
 
 - `dry_run` optional, default `false`
+- `purge_debug_queues` optional, default `false`; when `true`, the action passes `--debug-only` and purges only generated debug queues
 
 The action uses the same broker resolution as the CLI, so workflows can pass environment variables such as:
 
@@ -170,6 +171,7 @@ jobs:
           topology_file: infra/rabbitmq/topology.yaml
           dotnet_root: ${{ env.DOTNET_ROOT }}
           dry_run: "true"
+          purge_debug_queues: "true"
         env:
           SPHERE_RABBITMQ_MANAGEMENT_URL: ${{ secrets.SPHERE_RABBITMQ_MANAGEMENT_URL }}
           SPHERE_RABBITMQ_USERNAME: ${{ secrets.SPHERE_RABBITMQ_USERNAME }}
@@ -286,18 +288,20 @@ That includes:
 - declared queues
 - generated retry queues
 - generated dead-letter queues
-- generated debug queues when `debugQueues` is enabled and the YAML marks artifacts for debug queue generation
+- generated debug queues
 
 Execution rules:
 
 - requires `--allow-destructive` for non-dry execution
 - asks for interactive confirmation before executing
+- use `--debug-only` to limit the purge to generated debug queues
 - use `--auto-approve` to skip the confirmation prompt in automation or CI
 
 Examples:
 
 ```bash
 sprmq purge --file samples/minimal-topology.yaml --dry-run
+sprmq purge --file samples/minimal-topology.yaml --dry-run --debug-only
 sprmq purge --file samples/minimal-topology.yaml --allow-destructive
 sprmq purge --file samples/minimal-topology.yaml --allow-destructive --auto-approve
 ```

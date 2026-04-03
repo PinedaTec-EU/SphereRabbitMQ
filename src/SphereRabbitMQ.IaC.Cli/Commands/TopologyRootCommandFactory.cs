@@ -1,6 +1,4 @@
 using System.CommandLine;
-using System.CommandLine.Invocation;
-using System.CommandLine.Parsing;
 
 using Microsoft.Extensions.DependencyInjection;
 
@@ -70,11 +68,13 @@ internal static class TopologyRootCommandFactory
         """;
     private const string PurgeDescription = """
         Remove all messages from every queue declared by the normalized topology.
-        Generated retry, dead-letter, and debug queues are included when present in the YAML.
+        By default this includes declared queues plus generated retry, dead-letter, and debug queues.
+        Use --debug-only to purge only generated debug queues.
         Non-dry execution requires --allow-destructive and asks for confirmation unless --auto-approve is used.
 
         Examples:
           sprmq purge --file samples/minimal-topology.yaml --dry-run
+          sprmq purge --file samples/minimal-topology.yaml --dry-run --debug-only
           sprmq purge --file samples/minimal-topology.yaml --allow-destructive --auto-approve
         """;
     private const string ExportDescription = """
@@ -96,245 +96,289 @@ internal static class TopologyRootCommandFactory
         var handler = serviceProvider.GetRequiredService<TopologyCommandHandler>();
         var templateCatalog = serviceProvider.GetRequiredService<ITopologyTemplateCatalog>();
 
-        var fileOption = new Option<string>("--file") { IsRequired = true, Description = "Path to the topology YAML file." };
-        var templateOption = new Option<string>("--template", () => "minimal", $"Template name. Available: {string.Join(", ", templateCatalog.GetTemplateNames())}.");
-        var initOutputPathOption = new Option<string>("--output-file", () => "-", "Output file path for init. Use '-' to write YAML to stdout.");
-        var forceOption = new Option<bool>("--force", () => false, "Overwrite the output file when it already exists.");
-        var outputFormatOption = new Option<TopologyOutputFormat>("--output", () => TopologyOutputFormat.Text, "Output format: text or json.");
-        var managementUrlOption = new Option<string?>("--management-url", "RabbitMQ Management API URL.");
-        var usernameOption = new Option<string?>("--username", "RabbitMQ username.");
-        var passwordOption = new Option<string?>("--password", "RabbitMQ password.");
-        var virtualHostsOption = new Option<string[]?>("--vhost", "Virtual host filter. Repeat to pass multiple values.");
-        var dryRunOption = new Option<bool>("--dry-run", () => false, "Compute and print the apply result without changing the broker.");
-        var migrateOption = new Option<bool>("--migrate", () => false, "Allow supported exchange and queue migrations when immutable broker arguments changed.");
-        var verboseOption = new Option<bool>("--verbose", () => false, "Print detailed execution phases and broker operations.");
-        var allowDestructiveOption = new Option<bool>("--allow-destructive", () => false, "Allow destructive execution for commands that delete broker resources.");
-        var autoApproveOption = new Option<bool>("--auto-approve", () => false, "Skip the interactive confirmation prompt for destructive commands.");
-        var exportOutputPathOption = new Option<string>("--output-file", () => "-", "Output file path for export. Use '-' to write YAML to stdout.");
-        var exportFileOption = new Option<string?>("--file", "Optional topology YAML file used as a source for broker connection settings.");
-        var includeBrokerOption = new Option<bool>("--include-broker", () => false, "Include the resolved broker settings in the exported YAML.");
-        var shellArgument = new Argument<string>("shell", "Target shell: bash, zsh, or pwsh.");
-
-        var rootCommand = new RootCommand("SphereRabbitMQ.IaC")
+        var fileOption = new Option<string>("--file")
         {
-            Description = RootDescription,
+            Required = true,
+            Description = "Path to the topology YAML file.",
+        };
+        var templateOption = new Option<string>("--template")
+        {
+            DefaultValueFactory = _ => "minimal",
+            Description = $"Template name. Available: {string.Join(", ", templateCatalog.GetTemplateNames())}.",
+        };
+        var initOutputPathOption = new Option<string>("--output-file")
+        {
+            DefaultValueFactory = _ => "-",
+            Description = "Output file path for init. Use '-' to write YAML to stdout.",
+        };
+        var forceOption = new Option<bool>("--force")
+        {
+            DefaultValueFactory = _ => false,
+            Description = "Overwrite the output file when it already exists.",
+        };
+        var outputFormatOption = new Option<TopologyOutputFormat>("--output")
+        {
+            DefaultValueFactory = _ => TopologyOutputFormat.Text,
+            Description = "Output format: text or json.",
+        };
+        var managementUrlOption = new Option<string?>("--management-url")
+        {
+            Description = "RabbitMQ Management API URL.",
+        };
+        var usernameOption = new Option<string?>("--username")
+        {
+            Description = "RabbitMQ username.",
+        };
+        var passwordOption = new Option<string?>("--password")
+        {
+            Description = "RabbitMQ password.",
+        };
+        var virtualHostsOption = new Option<string[]>("--vhost")
+        {
+            DefaultValueFactory = _ => Array.Empty<string>(),
+            Description = "Virtual host filter. Repeat to pass multiple values.",
+        };
+        var dryRunOption = new Option<bool>("--dry-run")
+        {
+            DefaultValueFactory = _ => false,
+            Description = "Compute and print the apply result without changing the broker.",
+        };
+        var migrateOption = new Option<bool>("--migrate")
+        {
+            DefaultValueFactory = _ => false,
+            Description = "Allow supported exchange and queue migrations when immutable broker arguments changed.",
+        };
+        var verboseOption = new Option<bool>("--verbose")
+        {
+            DefaultValueFactory = _ => false,
+            Description = "Print detailed execution phases and broker operations.",
+        };
+        var allowDestructiveOption = new Option<bool>("--allow-destructive")
+        {
+            DefaultValueFactory = _ => false,
+            Description = "Allow destructive execution for commands that delete broker resources.",
+        };
+        var autoApproveOption = new Option<bool>("--auto-approve")
+        {
+            DefaultValueFactory = _ => false,
+            Description = "Skip the interactive confirmation prompt for destructive commands.",
+        };
+        var debugOnlyOption = new Option<bool>("--debug-only")
+        {
+            DefaultValueFactory = _ => false,
+            Description = "Purge only generated debug queues.",
+        };
+        var exportOutputPathOption = new Option<string>("--output-file")
+        {
+            DefaultValueFactory = _ => "-",
+            Description = "Output file path for export. Use '-' to write YAML to stdout.",
+        };
+        var exportFileOption = new Option<string?>("--file")
+        {
+            Description = "Optional topology YAML file used as a source for broker connection settings.",
+        };
+        var includeBrokerOption = new Option<bool>("--include-broker")
+        {
+            DefaultValueFactory = _ => false,
+            Description = "Include the resolved broker settings in the exported YAML.",
+        };
+        var shellArgument = new Argument<string>("shell")
+        {
+            Description = "Target shell: bash, zsh, or pwsh.",
         };
 
-        var initCommand = new Command("init")
+        var rootCommand = new RootCommand(RootDescription);
+
+        var initCommand = new Command("init", InitDescription);
+        initCommand.Options.Add(templateOption);
+        initCommand.Options.Add(initOutputPathOption);
+        initCommand.Options.Add(forceOption);
+        initCommand.SetAction(async (parseResult, cancellationToken) =>
         {
-            Description = InitDescription,
-        };
-        initCommand.AddOption(templateOption);
-        initCommand.AddOption(initOutputPathOption);
-        initCommand.AddOption(forceOption);
-        Handler.SetHandler(initCommand, async (InvocationContext context) =>
-        {
-            var parseResult = context.ParseResult;
-            var cancellationToken = context.GetCancellationToken();
             var exitCode = await handler.InitAsync(
-                parseResult.GetValueForOption(templateOption)!,
-                parseResult.GetValueForOption(initOutputPathOption)!,
-                parseResult.GetValueForOption(forceOption),
+                parseResult.GetRequiredValue(templateOption),
+                parseResult.GetRequiredValue(initOutputPathOption),
+                parseResult.GetValue(forceOption),
                 cancellationToken);
-            context.ExitCode = exitCode;
+            return exitCode;
         });
 
-        var validateCommand = new Command("validate")
+        var validateCommand = new Command("validate", ValidateDescription);
+        validateCommand.Options.Add(fileOption);
+        validateCommand.Options.Add(outputFormatOption);
+        validateCommand.Options.Add(verboseOption);
+        validateCommand.SetAction(async (parseResult, cancellationToken) =>
         {
-            Description = ValidateDescription,
-        };
-        validateCommand.AddOption(fileOption);
-        validateCommand.AddOption(outputFormatOption);
-        validateCommand.AddOption(verboseOption);
-        Handler.SetHandler(validateCommand, async (InvocationContext context) =>
-        {
-            var parseResult = context.ParseResult;
-            var cancellationToken = context.GetCancellationToken();
             var exitCode = await handler.ValidateAsync(
-                parseResult.GetValueForOption(fileOption)!,
-                parseResult.GetValueForOption(outputFormatOption),
-                parseResult.GetValueForOption(verboseOption),
+                parseResult.GetRequiredValue(fileOption),
+                parseResult.GetValue(outputFormatOption),
+                parseResult.GetValue(verboseOption),
                 cancellationToken);
-            context.ExitCode = exitCode;
+            return exitCode;
         });
 
-        var planCommand = new Command("plan")
+        var planCommand = new Command("plan", PlanDescription);
+        planCommand.Options.Add(fileOption);
+        planCommand.Options.Add(outputFormatOption);
+        planCommand.Options.Add(managementUrlOption);
+        planCommand.Options.Add(usernameOption);
+        planCommand.Options.Add(passwordOption);
+        planCommand.Options.Add(virtualHostsOption);
+        planCommand.Options.Add(verboseOption);
+        planCommand.SetAction(async (parseResult, cancellationToken) =>
         {
-            Description = PlanDescription,
-        };
-        planCommand.AddOption(fileOption);
-        planCommand.AddOption(outputFormatOption);
-        planCommand.AddOption(managementUrlOption);
-        planCommand.AddOption(usernameOption);
-        planCommand.AddOption(passwordOption);
-        planCommand.AddOption(virtualHostsOption);
-        planCommand.AddOption(verboseOption);
-        Handler.SetHandler(planCommand, async (InvocationContext context) =>
-        {
-            var parseResult = context.ParseResult;
-            var cancellationToken = context.GetCancellationToken();
+            var brokerOptions = new BrokerOptionsInput(
+                parseResult.GetValue(managementUrlOption),
+                parseResult.GetValue(usernameOption),
+                parseResult.GetValue(passwordOption),
+                parseResult.GetValue(virtualHostsOption));
             var exitCode = await handler.PlanAsync(
-                parseResult.GetValueForOption(fileOption)!,
-                CreateBrokerOptions(parseResult, managementUrlOption, usernameOption, passwordOption, virtualHostsOption),
-                parseResult.GetValueForOption(outputFormatOption),
-                parseResult.GetValueForOption(verboseOption),
+                parseResult.GetRequiredValue(fileOption),
+                brokerOptions,
+                parseResult.GetValue(outputFormatOption),
+                parseResult.GetValue(verboseOption),
                 cancellationToken);
-            context.ExitCode = exitCode;
+            return exitCode;
         });
 
-        var applyCommand = new Command("apply")
+        var applyCommand = new Command("apply", ApplyDescription);
+        applyCommand.Options.Add(fileOption);
+        applyCommand.Options.Add(outputFormatOption);
+        applyCommand.Options.Add(managementUrlOption);
+        applyCommand.Options.Add(usernameOption);
+        applyCommand.Options.Add(passwordOption);
+        applyCommand.Options.Add(virtualHostsOption);
+        applyCommand.Options.Add(dryRunOption);
+        applyCommand.Options.Add(migrateOption);
+        applyCommand.Options.Add(verboseOption);
+        applyCommand.SetAction(async (parseResult, cancellationToken) =>
         {
-            Description = ApplyDescription,
-        };
-        applyCommand.AddOption(fileOption);
-        applyCommand.AddOption(outputFormatOption);
-        applyCommand.AddOption(managementUrlOption);
-        applyCommand.AddOption(usernameOption);
-        applyCommand.AddOption(passwordOption);
-        applyCommand.AddOption(virtualHostsOption);
-        applyCommand.AddOption(dryRunOption);
-        applyCommand.AddOption(migrateOption);
-        applyCommand.AddOption(verboseOption);
-        Handler.SetHandler(applyCommand, async (InvocationContext context) =>
-        {
-            var parseResult = context.ParseResult;
-            var cancellationToken = context.GetCancellationToken();
+            var brokerOptions = new BrokerOptionsInput(
+                parseResult.GetValue(managementUrlOption),
+                parseResult.GetValue(usernameOption),
+                parseResult.GetValue(passwordOption),
+                parseResult.GetValue(virtualHostsOption));
             var exitCode = await handler.ApplyAsync(
-                parseResult.GetValueForOption(fileOption)!,
-                CreateBrokerOptions(parseResult, managementUrlOption, usernameOption, passwordOption, virtualHostsOption),
-                parseResult.GetValueForOption(outputFormatOption),
-                parseResult.GetValueForOption(dryRunOption),
-                parseResult.GetValueForOption(migrateOption),
-                parseResult.GetValueForOption(verboseOption),
+                parseResult.GetRequiredValue(fileOption),
+                brokerOptions,
+                parseResult.GetValue(outputFormatOption),
+                parseResult.GetValue(dryRunOption),
+                parseResult.GetValue(migrateOption),
+                parseResult.GetValue(verboseOption),
                 cancellationToken);
-            context.ExitCode = exitCode;
+            return exitCode;
         });
 
-        var destroyCommand = new Command("destroy")
+        var destroyCommand = new Command("destroy", DestroyDescription);
+        destroyCommand.Options.Add(fileOption);
+        destroyCommand.Options.Add(outputFormatOption);
+        destroyCommand.Options.Add(managementUrlOption);
+        destroyCommand.Options.Add(usernameOption);
+        destroyCommand.Options.Add(passwordOption);
+        destroyCommand.Options.Add(virtualHostsOption);
+        destroyCommand.Options.Add(dryRunOption);
+        destroyCommand.Options.Add(verboseOption);
+        destroyCommand.Options.Add(allowDestructiveOption);
+        destroyCommand.Options.Add(autoApproveOption);
+        destroyCommand.SetAction(async (parseResult, cancellationToken) =>
         {
-            Description = DestroyDescription,
-        };
-        var purgeCommand = new Command("purge")
-        {
-            Description = PurgeDescription,
-        };
-        destroyCommand.AddOption(fileOption);
-        destroyCommand.AddOption(outputFormatOption);
-        destroyCommand.AddOption(managementUrlOption);
-        destroyCommand.AddOption(usernameOption);
-        destroyCommand.AddOption(passwordOption);
-        destroyCommand.AddOption(virtualHostsOption);
-        destroyCommand.AddOption(dryRunOption);
-        destroyCommand.AddOption(verboseOption);
-        destroyCommand.AddOption(allowDestructiveOption);
-        destroyCommand.AddOption(autoApproveOption);
-        Handler.SetHandler(destroyCommand, async (InvocationContext context) =>
-        {
-            var parseResult = context.ParseResult;
-            var cancellationToken = context.GetCancellationToken();
+            var brokerOptions = new BrokerOptionsInput(
+                parseResult.GetValue(managementUrlOption),
+                parseResult.GetValue(usernameOption),
+                parseResult.GetValue(passwordOption),
+                parseResult.GetValue(virtualHostsOption));
             var exitCode = await handler.DestroyAsync(
-                parseResult.GetValueForOption(fileOption)!,
-                CreateBrokerOptions(parseResult, managementUrlOption, usernameOption, passwordOption, virtualHostsOption),
-                parseResult.GetValueForOption(outputFormatOption),
-                parseResult.GetValueForOption(dryRunOption),
-                parseResult.GetValueForOption(verboseOption),
-                parseResult.GetValueForOption(allowDestructiveOption),
-                parseResult.GetValueForOption(autoApproveOption),
+                parseResult.GetRequiredValue(fileOption),
+                brokerOptions,
+                parseResult.GetValue(outputFormatOption),
+                parseResult.GetValue(dryRunOption),
+                parseResult.GetValue(verboseOption),
+                parseResult.GetValue(allowDestructiveOption),
+                parseResult.GetValue(autoApproveOption),
                 true,
                 cancellationToken);
-            context.ExitCode = exitCode;
+            return exitCode;
         });
 
-        purgeCommand.AddOption(fileOption);
-        purgeCommand.AddOption(outputFormatOption);
-        purgeCommand.AddOption(managementUrlOption);
-        purgeCommand.AddOption(usernameOption);
-        purgeCommand.AddOption(passwordOption);
-        purgeCommand.AddOption(virtualHostsOption);
-        purgeCommand.AddOption(dryRunOption);
-        purgeCommand.AddOption(verboseOption);
-        purgeCommand.AddOption(allowDestructiveOption);
-        purgeCommand.AddOption(autoApproveOption);
-        Handler.SetHandler(purgeCommand, async (InvocationContext context) =>
+        var purgeCommand = new Command("purge", PurgeDescription);
+        purgeCommand.Options.Add(fileOption);
+        purgeCommand.Options.Add(outputFormatOption);
+        purgeCommand.Options.Add(managementUrlOption);
+        purgeCommand.Options.Add(usernameOption);
+        purgeCommand.Options.Add(passwordOption);
+        purgeCommand.Options.Add(virtualHostsOption);
+        purgeCommand.Options.Add(dryRunOption);
+        purgeCommand.Options.Add(verboseOption);
+        purgeCommand.Options.Add(allowDestructiveOption);
+        purgeCommand.Options.Add(autoApproveOption);
+        purgeCommand.Options.Add(debugOnlyOption);
+        purgeCommand.SetAction(async (parseResult, cancellationToken) =>
         {
-            var parseResult = context.ParseResult;
-            var cancellationToken = context.GetCancellationToken();
+            var brokerOptions = new BrokerOptionsInput(
+                parseResult.GetValue(managementUrlOption),
+                parseResult.GetValue(usernameOption),
+                parseResult.GetValue(passwordOption),
+                parseResult.GetValue(virtualHostsOption));
             var exitCode = await handler.PurgeAsync(
-                parseResult.GetValueForOption(fileOption)!,
-                CreateBrokerOptions(parseResult, managementUrlOption, usernameOption, passwordOption, virtualHostsOption),
-                parseResult.GetValueForOption(outputFormatOption),
-                parseResult.GetValueForOption(dryRunOption),
-                parseResult.GetValueForOption(verboseOption),
-                parseResult.GetValueForOption(allowDestructiveOption),
-                parseResult.GetValueForOption(autoApproveOption),
+                parseResult.GetRequiredValue(fileOption),
+                brokerOptions,
+                parseResult.GetValue(outputFormatOption),
+                parseResult.GetValue(dryRunOption),
+                parseResult.GetValue(verboseOption),
+                parseResult.GetValue(allowDestructiveOption),
+                parseResult.GetValue(autoApproveOption),
+                parseResult.GetValue(debugOnlyOption),
                 cancellationToken);
-            context.ExitCode = exitCode;
+            return exitCode;
         });
 
-        var exportCommand = new Command("export")
+        var exportCommand = new Command("export", ExportDescription);
+        exportCommand.Options.Add(exportFileOption);
+        exportCommand.Options.Add(outputFormatOption);
+        exportCommand.Options.Add(managementUrlOption);
+        exportCommand.Options.Add(usernameOption);
+        exportCommand.Options.Add(passwordOption);
+        exportCommand.Options.Add(virtualHostsOption);
+        exportCommand.Options.Add(exportOutputPathOption);
+        exportCommand.Options.Add(includeBrokerOption);
+        exportCommand.Options.Add(verboseOption);
+        exportCommand.SetAction(async (parseResult, cancellationToken) =>
         {
-            Description = ExportDescription,
-        };
-        var completionCommand = new Command("completion")
-        {
-            Description = CompletionDescription,
-        };
-        exportCommand.AddOption(exportFileOption);
-        exportCommand.AddOption(outputFormatOption);
-        exportCommand.AddOption(managementUrlOption);
-        exportCommand.AddOption(usernameOption);
-        exportCommand.AddOption(passwordOption);
-        exportCommand.AddOption(virtualHostsOption);
-        exportCommand.AddOption(exportOutputPathOption);
-        exportCommand.AddOption(includeBrokerOption);
-        exportCommand.AddOption(verboseOption);
-        Handler.SetHandler(exportCommand, async (InvocationContext context) =>
-        {
-            var parseResult = context.ParseResult;
-            var cancellationToken = context.GetCancellationToken();
+            var brokerOptions = new BrokerOptionsInput(
+                parseResult.GetValue(managementUrlOption),
+                parseResult.GetValue(usernameOption),
+                parseResult.GetValue(passwordOption),
+                parseResult.GetValue(virtualHostsOption));
             var exitCode = await handler.ExportAsync(
-                parseResult.GetValueForOption(exportFileOption),
-                CreateBrokerOptions(parseResult, managementUrlOption, usernameOption, passwordOption, virtualHostsOption),
-                parseResult.GetValueForOption(exportOutputPathOption)!,
-                parseResult.GetValueForOption(includeBrokerOption),
-                parseResult.GetValueForOption(outputFormatOption),
-                parseResult.GetValueForOption(verboseOption),
+                parseResult.GetValue(exportFileOption),
+                brokerOptions,
+                parseResult.GetRequiredValue(exportOutputPathOption),
+                parseResult.GetValue(includeBrokerOption),
+                parseResult.GetValue(outputFormatOption),
+                parseResult.GetValue(verboseOption),
                 cancellationToken);
-            context.ExitCode = exitCode;
+            return exitCode;
         });
 
-        completionCommand.AddArgument(shellArgument);
-        Handler.SetHandler(completionCommand, async (InvocationContext context) =>
+        var completionCommand = new Command("completion", CompletionDescription);
+        completionCommand.Arguments.Add(shellArgument);
+        completionCommand.SetAction(async (parseResult, cancellationToken) =>
         {
-            var parseResult = context.ParseResult;
-            var cancellationToken = context.GetCancellationToken();
             var exitCode = await handler.CompletionAsync(
-                parseResult.GetValueForArgument(shellArgument)!,
+                parseResult.GetRequiredValue(shellArgument),
                 cancellationToken);
-            context.ExitCode = exitCode;
+            return exitCode;
         });
 
-        rootCommand.AddCommand(initCommand);
-        rootCommand.AddCommand(validateCommand);
-        rootCommand.AddCommand(planCommand);
-        rootCommand.AddCommand(applyCommand);
-        rootCommand.AddCommand(purgeCommand);
-        rootCommand.AddCommand(destroyCommand);
-        rootCommand.AddCommand(exportCommand);
-        rootCommand.AddCommand(completionCommand);
+        rootCommand.Subcommands.Add(initCommand);
+        rootCommand.Subcommands.Add(validateCommand);
+        rootCommand.Subcommands.Add(planCommand);
+        rootCommand.Subcommands.Add(applyCommand);
+        rootCommand.Subcommands.Add(purgeCommand);
+        rootCommand.Subcommands.Add(destroyCommand);
+        rootCommand.Subcommands.Add(exportCommand);
+        rootCommand.Subcommands.Add(completionCommand);
 
         return rootCommand;
     }
-
-    private static BrokerOptionsInput CreateBrokerOptions(
-        ParseResult parseResult,
-        Option<string?> managementUrlOption,
-        Option<string?> usernameOption,
-        Option<string?> passwordOption,
-        Option<string[]?> virtualHostsOption)
-        => new(
-            parseResult.GetValueForOption(managementUrlOption),
-            parseResult.GetValueForOption(usernameOption),
-            parseResult.GetValueForOption(passwordOption),
-            parseResult.GetValueForOption(virtualHostsOption));
 }

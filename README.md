@@ -1,10 +1,12 @@
+# SphereRabbitMQ
+
 <p align="center">
   <a href="https://github.com/PinedaTec-EU/SphereRabbitMQ">
     <img loading="lazy" alt="Sphere RabbitMQ" src="./docs/SRMQ.jpg" width="85%"/>
   </a>
 </p>
 
-# SphereRabbitMQ
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/PinedaTec-EU/SphereRabbitMQ)
 
 `SphereRabbitMQ` is a .NET 10 RabbitMQ toolkit split into two clearly separated parts:
 
