@@ -27,3 +27,11 @@ Este repositorio consume skills compartidas desde `../ai-skills-shared`.
 4. `../ai-skills-shared/AGENTS.md`.
 5. Skills compartidas aplicables en `../ai-skills-shared/.shared-skills/skills/*`.
 6. Prompt del usuario para la tarea actual.
+
+<!-- ai-skills-bootstrap:begin -->
+## Shared skills
+
+Read `.skills/index.md` to discover the shared skills selected for this repository.
+Load only the adapter relevant to the current task.
+Canonical source: `../ai-skills-shared`.
+<!-- ai-skills-bootstrap:end -->
